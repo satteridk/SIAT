@@ -1,13 +1,11 @@
 #include "../../include/os_globals.h"
 #include "../../include/apps/app_explorer.h"
-#include "../../include/apps/app_calc.h"
 
 void limparCache() {
-  for(int i = 0; i < MAX_LINHAS_CACHE; i++) {
+  for (int i = 0; i < MAX_LINHAS_CACHE; i++) {
     cacheLinhas[i] = "";
-    cacheLinhas[i].reserve(MAX_CHARS_LINHA + 5); 
-    for(int j = 0; j < MAX_CHARS_LINHA; j++) {
-      cacheCores[i][j] = ST77XX_GREEN; 
+    for (int j = 0; j < MAX_CHARS_LINHA; j++) {
+      cacheCores[i][j] = ST77XX_WHITE;
     }
   }
   idxLinhaCache = 0;
@@ -16,121 +14,131 @@ void limparCache() {
 }
 
 void novaLinhaCache() {
-  idxLinhaCache++;
-  if (idxLinhaCache >= MAX_LINHAS_CACHE) {
-    for(int k = 1; k < MAX_LINHAS_CACHE; k++) {
-      cacheLinhas[k-1] = cacheLinhas[k];
-      for(int c = 0; c < MAX_CHARS_LINHA; c++) {
-        cacheCores[k-1][c] = cacheCores[k][c];
+  if (idxLinhaCache < MAX_LINHAS_CACHE - 1) {
+    idxLinhaCache++;
+  } else {
+    for (int i = 0; i < MAX_LINHAS_CACHE - 1; i++) {
+      cacheLinhas[i] = cacheLinhas[i + 1];
+      for (int j = 0; j < MAX_CHARS_LINHA; j++) {
+        cacheCores[i][j] = cacheCores[i + 1][j];
       }
     }
-    idxLinhaCache = MAX_LINHAS_CACHE - 1;
-    if (indiceLinhaInicioPagina > 0) indiceLinhaInicioPagina--;
-  }
-  cacheLinhas[idxLinhaCache] = "";
-  for(int c = 0; c < MAX_CHARS_LINHA; c++) {
-    cacheCores[idxLinhaCache][c] = ST77XX_GREEN;
+    cacheLinhas[MAX_LINHAS_CACHE - 1] = "";
+    for (int j = 0; j < MAX_CHARS_LINHA; j++) {
+      cacheCores[MAX_LINHAS_CACHE - 1][j] = ST77XX_WHITE;
+    }
   }
 }
 
 void adicionarAoCache(char c, uint16_t cor) {
-  int pos = cacheLinhas[idxLinhaCache].length();
-  if (pos < MAX_CHARS_LINHA) {
-    cacheCores[idxLinhaCache][pos] = cor;
+  int len = cacheLinhas[idxLinhaCache].length();
+  if (len < MAX_CHARS_LINHA - 1) {
+    cacheLinhas[idxLinhaCache] += c;
+    cacheCores[idxLinhaCache][len] = cor;
   }
-  cacheLinhas[idxLinhaCache] += c;
 }
 
 void desenharLinhaCache(int indice, int y) {
-  int currX = margemEsquerda;
-  int len = cacheLinhas[indice].length();
-  int startIdx = 0;
-  
-  while(startIdx < len) {
-     uint16_t cCor = (startIdx < MAX_CHARS_LINHA) ? cacheCores[indice][startIdx] : ST77XX_GREEN;
-     String chunk = "";
-     int j = startIdx;
-     
-     while (j < len && ((j < MAX_CHARS_LINHA && cacheCores[indice][j] == cCor) || (j >= MAX_CHARS_LINHA && cCor == ST77XX_GREEN))) {
-        chunk += cacheLinhas[indice][j];
-        j++;
-     }
-     tft.setTextColor(cCor);
-     tft.setCursor(currX, y);
-     tft.print(chunk);
-     currX += chunk.length() * 6; 
-     startIdx = j;
+  int x = margemEsquerda;
+  tft.setTextSize(1);
+  for (size_t i = 0; i < cacheLinhas[indice].length(); i++) {
+    tft.setTextColor(cacheCores[indice][i]);
+    tft.setCursor(x, y);
+    tft.print(cacheLinhas[indice][i]);
+    x += 6;
   }
 }
 
 void restaurarPaginaAtual() {
   tft.fillScreen(ST77XX_BLACK);
   desenharCabecalho();
-  int tempY = inicioTextoY;
-  tft.setTextSize(1);
-  for (int i = indiceLinhaInicioPagina; i <= idxLinhaCache; i++) {
-    if (i >= 0 && i < MAX_LINHAS_CACHE) {
-      desenharLinhaCache(i, tempY);
-      tempY += 12;
-    }
+  
+  int maxLinhasVisiveis = (tft.height() - inicioTextoY - 20) / 12;
+  int linhaInicioRender = idxLinhaCache - maxLinhasVisiveis + 1;
+  if (linhaInicioRender < indiceLinhaInicioPagina) {
+    linhaInicioRender = indiceLinhaInicioPagina;
   }
+  if (linhaInicioRender < 0) linhaInicioRender = 0;
+
+  int y = inicioTextoY;
+  for (int i = linhaInicioRender; i <= idxLinhaCache; i++) {
+    desenharLinhaCache(i, y);
+    y += 12;
+  }
+  cursorX = margemEsquerda;
+  if (cacheLinhas[idxLinhaCache].length() > 0) {
+      cursorX = margemEsquerda + (cacheLinhas[idxLinhaCache].length() * 6);
+  }
+  cursorY = y - 12;
 }
 
 void renderizarScroll() {
   tft.fillScreen(ST77XX_BLACK);
   desenharCabecalho();
-  tft.setTextSize(1);
 
-  int maxLinhasTela = (tft.height() - 4 - inicioTextoY) / 12;
-  int linhaFim = idxLinhaCache - scrollLinha;
-  int linhaInicio = linhaFim - maxLinhasTela + 1;
+  int maxLinhasVisiveis = (tft.height() - inicioTextoY - 20) / 12;
   
-  if (linhaInicio < 0) linhaInicio = 0;
+  int linhaFimScroll = idxLinhaCache - scrollLinha;
+  if (linhaFimScroll < 0) linhaFimScroll = 0;
 
-  int tempY = inicioTextoY;
-  for (int i = linhaInicio; i <= linhaFim; i++) {
-    if (i >= 0 && i < MAX_LINHAS_CACHE) {
-      desenharLinhaCache(i, tempY);
-      tempY += 12; 
-    }
+  int linhaInicioScroll = linhaFimScroll - maxLinhasVisiveis + 1;
+  if (linhaInicioScroll < 0) linhaInicioScroll = 0;
+
+  int y = inicioTextoY;
+  for (int i = linhaInicioScroll; i <= linhaFimScroll; i++) {
+    desenharLinhaCache(i, y);
+    y += 12;
+  }
+
+  tft.fillRect((tft.width() * 0.6) - 10, inicioTextoY, 4, tft.height() - inicioTextoY - 20, COR_CINZA);
+  
+  int totalLinhas = idxLinhaCache + 1;
+  if (totalLinhas > maxLinhasVisiveis) {
+      float proporcao = (float)maxLinhasVisiveis / totalLinhas;
+      int alturaBarra = proporcao * (tft.height() - inicioTextoY - 20);
+      if (alturaBarra < 10) alturaBarra = 10; 
+      
+      float progresso = 1.0 - ((float)scrollLinha / (totalLinhas - maxLinhasVisiveis));
+      int maxYBarra = (tft.height() - 20) - alturaBarra;
+      int yBarra = inicioTextoY + (progresso * (maxYBarra - inicioTextoY));
+      
+      tft.fillRect((tft.width() * 0.6) - 11, yBarra, 6, alturaBarra, ST77XX_WHITE);
   }
 }
 
-// O Default Argument foi removido daqui para evitar erros de C++ (fica apenas no .h)
 void avancarLinha(uint16_t corRestaurar, int tamanhoFonteRestaurar) {
-  cursorX = margemEsquerda;
-  cursorY += 12;
+  cursorY += (8 * tamanhoFonteRestaurar) + 4; 
+  cursorX = margemEsquerda; 
   novaLinhaCache();
   
-  int limiteTextoY = tft.height() - 4;
-  
-  if (cursorY + 8 > limiteTextoY) {
-    indiceLinhaInicioPagina++;
-    cursorY -= 12; 
-    restaurarPaginaAtual();
-    tft.setTextColor(corRestaurar);
-    tft.setTextSize(tamanhoFonteRestaurar);
+  if (cursorY > tft.height() - 20) {
+    restaurarPaginaAtual(); 
+    cursorY = tft.height() - 24; 
   }
+  tft.setTextColor(corRestaurar); 
 }
 
 String limparAcentos(const String& textoOriginal) {
   String texto = textoOriginal;
-  texto.replace("á","a"); texto.replace("à","a"); texto.replace("ã","a"); texto.replace("â","a");
-  texto.replace("é","e"); texto.replace("ê","e"); texto.replace("í","i");
-  texto.replace("ó","o"); texto.replace("õ","o"); texto.replace("ô","o"); texto.replace("ú","u");
-  texto.replace("ç","c"); 
-  texto.replace("Á","A"); texto.replace("Ã","A"); texto.replace("É","E");
-  texto.replace("Í","I"); texto.replace("Ó","O"); texto.replace("Õ","O"); texto.replace("Ú","U");
-  texto.replace("Ç","C"); 
+  texto.replace("á", "a"); texto.replace("à", "a"); texto.replace("â", "a"); texto.replace("ã", "a");
+  texto.replace("é", "e"); texto.replace("è", "e"); texto.replace("ê", "e");
+  texto.replace("í", "i"); texto.replace("ì", "i"); texto.replace("î", "i");
+  texto.replace("ó", "o"); texto.replace("ò", "o"); texto.replace("ô", "o"); texto.replace("õ", "o");
+  texto.replace("ú", "u"); texto.replace("ù", "u"); texto.replace("û", "u");
+  texto.replace("ç", "c");
+  texto.replace("Á", "A"); texto.replace("À", "A"); texto.replace("Â", "A"); texto.replace("Ã", "A");
+  texto.replace("É", "E"); texto.replace("È", "E"); texto.replace("Ê", "E");
+  texto.replace("Í", "I"); texto.replace("Ì", "I"); texto.replace("Î", "I");
+  texto.replace("Ó", "O"); texto.replace("Ò", "O"); texto.replace("Ô", "O"); texto.replace("Õ", "O");
+  texto.replace("Ú", "U"); texto.replace("Ù", "U"); texto.replace("Û", "U");
+  texto.replace("Ç", "C");
   return texto;
 }
 
 void processarEntradaTerminal() {
   if (!Serial.available()) return;
-  
   String textoLido = Serial.readString(); 
   textoLido.trim(); 
-  
   if (textoLido.length() == 0) return;
 
   if (telaInicialCreditos) {
@@ -146,7 +154,7 @@ void processarEntradaTerminal() {
   if (scrollLinha == 0) {
     tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_BLACK);
   }
-  
+
   textoLido = limparAcentos(textoLido);
   String textoUpper = textoLido;
   textoUpper.toUpperCase();
@@ -158,7 +166,6 @@ void processarEntradaTerminal() {
     desenharMenu();
     return; 
   }
-  
   if (textoUpper == "S") {
     if (opcaoSelecionada < (int)menuAtual.size() - 1) opcaoSelecionada++;
     else opcaoSelecionada = 0; 
@@ -166,15 +173,14 @@ void processarEntradaTerminal() {
     desenharMenu();
     return;
   }
-  
   if (textoUpper == "E") {
     if (menuAtual.empty()) return;
     acaoExplorador(menuAtual[opcaoSelecionada]);
     return;
   }
 
-  if (textoUpper == "CALC" && !modoCalc) {
-    modoCalc = true; 
+  if (textoUpper == "CALC" && estadoAtual != APP_CALCULADORA) {
+    estadoAtual = APP_CALCULADORA; 
     if (cursorX > margemEsquerda) avancarLinha();
     escreverEfeitoDigitacao("CALCULADORA ATIVADA. Digite EXIT para sair.", 1, ST77XX_GREEN);
     avancarLinha();
@@ -183,11 +189,6 @@ void processarEntradaTerminal() {
     return; 
   }
 
-  if (modoCalc) {
-    processarEntradaCalc(textoLido);
-    return; 
-  }
-  
   if (scrollLinha > 0 && textoUpper != "UP" && textoUpper != "DOWN") {
     scrollLinha = 0; restaurarPaginaAtual();
   }
@@ -237,15 +238,13 @@ void processarEntradaTerminal() {
     };
     int numMensagens = 8; 
     bool interrompido = false;
-
     for (int i = 0; i < numMensagens; i += 2) {
       tft.fillScreen(ST77XX_BLACK); 
       desenharCabecalho(); 
       cursorX = margemEsquerda; 
       cursorY = inicioTextoY;
       novaLinhaCache(); 
-      indiceLinhaInicioPagina = idxLinhaCache; 
-      
+      indiceLinhaInicioPagina = idxLinhaCache;       
       for (int j = 0; j < 2; j++) {
         if (i + j < numMensagens) {
           if (Serial.available()) { interrompido = true; break; }
@@ -285,7 +284,7 @@ void processarEntradaTerminal() {
     escreverEfeitoDigitacao("Erro: Comando nao reconhecido.", 1, ST77XX_GREEN);
   }
 
-  if (modoComando && textoUpper != "UP" && textoUpper != "DOWN") {
+  if (textoUpper != "UP" && textoUpper != "DOWN") {
     if (cursorX > margemEsquerda) {
        avancarLinha();
     }

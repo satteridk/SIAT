@@ -12,10 +12,12 @@ unsigned long tempoUltimoBlink = 0;
 bool cursorVisivel = false;
 bool esperandoTexto = true; 
 String tituloAtual = "TERMINAL V2.6";
-bool modoComando = true; 
-bool modoCalc = false;
 bool telaInicialCreditos = true;
-bool popupAberto = false;
+
+// Inicialização da Máquina de Estados
+EstadoSistema estadoAtual = TERMINAL_CMD;
+EstadoSistema estadoAnterior = TERMINAL_CMD;
+
 unsigned long tempoAberturaPopup = 0;
 int segundosRestantes = 3;
 bool estadoAnteriorBotao = HIGH;
@@ -25,7 +27,6 @@ std::vector<MenuItem> menuAtual;
 int opcaoSelecionada = 0;
 int marqueeOffset = 0;
 unsigned long lastMarqueeUpdate = 0;
-bool modoSnake = false;
 bool forcarRedrawSnake = false; 
 
 String cacheLinhas[MAX_LINHAS_CACHE];
@@ -37,7 +38,6 @@ int scrollLinha = 0;
 volatile bool uartOcupada = false;
 TaskHandle_t TaskCore0;
 
-// O MOTOR DO NÚCLEO ZERO: Cuida do hardware em background para o GUI não travar
 void TarefaBackground(void *pvParameters) {
   for(;;) {
     if (!uartOcupada && Serial2.available()) {
@@ -47,16 +47,15 @@ void TarefaBackground(void *pvParameters) {
         Serial.println("[CORE 0 - PICO MSG]: " + recebido);
       }
     }
-    vTaskDelay(pdMS_TO_TICKS(10)); // Alimenta o Watchdog do ESP32 para não surtar
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 
 void setup() {
   Serial.begin(115200);
-  Serial2.begin(921600, SERIAL_8N1, 16, 17); // <-- Banda extrema habilitada
+  Serial2.begin(921600, SERIAL_8N1, 16, 17); 
   Serial2.setTimeout(20);
 
-  // Isola a tarefa secundária no Núcleo 0
   xTaskCreatePinnedToCore(TarefaBackground, "TaskCore0", 4096, NULL, 1, &TaskCore0, 0);
 
   pinMode(PINO_BOTAO, INPUT_PULLUP);
@@ -79,22 +78,31 @@ void setup() {
 
 void loop() {
   verificarBotaoFisico();
-  if (modoSnake) {
-    processarEntradaSnake();
-  } else {
-    processarEntradaTerminal();
+  
+  // Roteador de Tráfego Central (FSM)
+  switch(estadoAtual) {
+    case TERMINAL_CMD:
+      processarEntradaTerminal();
+      break;
+    case APP_CALCULADORA:
+      processarEntradaCalc();
+      break;
+    case APP_SNAKE:
+      processarEntradaSnake();
+      break;
+    case POPUP_DESLIGAR:
+      // A interface e os apps congelam automaticamente, o relógio do popup roda isolado na interrupção de hardware.
+      break;
+  }
+  
+  // Efeitos visuais correm independentemente contanto que o sistema não esteja num App Fullscreen ou Popup
+  if (estadoAtual == TERMINAL_CMD || estadoAtual == APP_CALCULADORA) {
     atualizarMarquee();
-    
-    if (!popupAberto) {
-      if (millis() - tempoUltimoBlink > (unsigned long)intervaloBlink) {
-        tempoUltimoBlink = millis();
-        cursorVisivel = !cursorVisivel;
-        if (cursorVisivel) {
-          tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_WHITE);
-        } else {
-          tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_BLACK);
-        }
-      }
+    if (millis() - tempoUltimoBlink > (unsigned long)intervaloBlink) {
+      tempoUltimoBlink = millis();
+      cursorVisivel = !cursorVisivel;
+      if (cursorVisivel) tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_WHITE);
+      else tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_BLACK);
     }
   }
 }

@@ -1,21 +1,25 @@
 #include "../../include/apps/app_calc.h"
 
-void processarEntradaCalc(String textoLido) {
+void processarEntradaCalc() {
+  if (!Serial.available()) return;
+  String textoLido = Serial.readString();
+  textoLido.trim();
+  if (textoLido.length() == 0) return;
+
   String textoUpper = textoLido;
   textoUpper.toUpperCase();
 
   if (textoUpper == "EXIT") {
-    modoCalc = false;
+    estadoAtual = TERMINAL_CMD; // O FSM devolverá o sistema ao Terminal imediatamente 
     if (cursorX > margemEsquerda) avancarLinha();
     escreverEfeitoDigitacao("CALCULADORA DESATIVADA.", 1, ST77XX_GREEN);
-    if (modoComando) {
-      if (cursorX > margemEsquerda) avancarLinha();
-      escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
-    }
+    
+    if (cursorX > margemEsquerda) avancarLinha();
+    escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
+    
     esperandoTexto = true;
     return;
   }
-
   if (textoUpper == "UP") {
     int maxScroll = idxLinhaCache;
     if (scrollLinha < maxScroll) {
@@ -25,7 +29,6 @@ void processarEntradaCalc(String textoLido) {
     }
     return;
   }
-
   if (textoUpper == "DOWN") {
     if (scrollLinha > 0) {
       scrollLinha -= 3;
@@ -38,11 +41,10 @@ void processarEntradaCalc(String textoLido) {
     }
     return;
   }
-
-  if (scrollLinha > 0 && textoUpper != "UP" && textoUpper != "DOWN") { 
-    scrollLinha = 0; 
-    restaurarPaginaAtual(); 
-  }
+  if (scrollLinha > 0 && textoUpper != "UP" && textoUpper != "DOWN") {
+     scrollLinha = 0;
+     restaurarPaginaAtual();
+   }
 
   escreverEfeitoDigitacao(textoLido, 1, ST77XX_WHITE);
   avancarLinha();

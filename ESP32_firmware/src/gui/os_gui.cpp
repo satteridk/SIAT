@@ -232,8 +232,8 @@ void desenharPopup(int segundos) {
 }
 
 void fecharPopup() {
-  popupAberto = false;
-  if (modoSnake) {
+  estadoAtual = estadoAnterior;
+  if (estadoAtual == APP_SNAKE) {
     forcarRedrawSnake = true; 
   } else {
     if (scrollLinha > 0) {
