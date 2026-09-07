@@ -15,20 +15,22 @@
 #define TFT_MOSI  23
 #define TFT_SCLK  18
 #define PINO_BOTAO 13
-#define PINO_TELA  15 
+#define PINO_TELA  15
 
 const int margemEsquerda = 5;
 const int inicioTextoY = 20;
-const int intervaloBlink = 400; 
+const int intervaloBlink = 400;
 
 #define ICONE_PASTA_FECHADA 0
 #define ICONE_PASTA_ABERTA 1
 #define ICONE_JOYSTICK 2
 #define ICONE_MONITOR 3
 #define ICONE_ARQUIVO 5
+#define ICONE_MUSICA 6
+#define ICONE_TEXTO 7
 
 const int MAX_LINHAS_CACHE = 200;
-#define MAX_CHARS_LINHA 50 
+#define MAX_CHARS_LINHA 50
 
 struct FileNode {
   String name;

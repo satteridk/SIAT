@@ -1,9 +1,20 @@
 #include "../../include/apps/app_explorer.h"
 #include "../../include/apps/app_snake.h"
 
+// Função auxiliar para traduzir bytes para KB, MB e GB
+String formatarTamanhoBytes(String tamanhoStr) {
+  if (tamanhoStr.length() == 0) return "";
+  double bytes = tamanhoStr.toDouble(); // Usa double para evitar estouro de limite de 2GB
+  
+  if (bytes < 1024) return String((int)bytes) + " bytes";
+  else if (bytes < 1048576) return String(bytes / 1024.0, 2) + " KB";
+  else if (bytes < 1073741824) return String(bytes / 1048576.0, 2) + " MB";
+  else return String(bytes / 1073741824.0, 2) + " GB";
+}
+
 void acaoExplorador(MenuItem& item) {
   if (item.actionId == 1) { 
-    iniciarSnake();
+     iniciarSnake();
   } 
   else if (item.actionId == 2) {
     Serial.println("App/Jogo Selecionado: AudioPlayer");
@@ -13,12 +24,10 @@ void acaoExplorador(MenuItem& item) {
       item.node->expanded = !item.node->expanded;
       
       if (item.node->expanded) {
-          
           if (item.node->name == "SD PICO") {
-              item.node->children.clear(); 
+              item.node->children.clear();
               
               Serial.println("Explorador de arquivos: Solicitando dados ao PICO...");
-              
               Serial2.println("DADOS_SD"); 
               
               String dadosSD = ""; 
@@ -29,11 +38,13 @@ void acaoExplorador(MenuItem& item) {
                   if (Serial2.available()) {
                       String linha = Serial2.readStringUntil('\n');
                       linha.trim();
+                      
                       if (linha == "INICIO_SD") {
                           recebendo = true;
-                          Serial.println("\n--- ESTRUTURA DO CARTAO MICROSD ---");
+                          Serial.println("\n--- CONTEUDO DO CARTAO MICROSD ---");
+                          Serial.println("/SD_PICO"); // Imprime o "Disco" raiz
                       } else if (linha == "FIM_SD") {
-                          Serial.println("-----------------------------------");
+                          Serial.println("----------------------------------");
                           break; 
                       } else if (recebendo && linha.length() > 0) {
                           dadosSD += linha + "\n"; 
@@ -46,14 +57,17 @@ void acaoExplorador(MenuItem& item) {
                               String tipo = linha.substring(0, pos1);
                               int nivel = linha.substring(pos1 + 1, pos2).toInt();
                               String nome = linha.substring(pos2 + 1, (pos3 == -1) ? linha.length() : pos3);
-                              String tamanho = (pos3 != -1) ? linha.substring(pos3 + 1) : "";
+                              String tamanhoStr = (pos3 != -1) ? linha.substring(pos3 + 1) : "";
                               
-                              for(int i=0; i < nivel; i++) Serial.print("  "); 
+                              // Adiciona um espaço extra de indentação (+1) para simular que estão DENTRO do /SD_PICO
+                              for(int i = 0; i <= nivel; i++) Serial.print("  "); 
+                              
                               if(tipo == "D") {
                                   Serial.print("[PASTA]   /"); Serial.println(nome);
                               } else {
+                                  String tamanhoFormatado = formatarTamanhoBytes(tamanhoStr);
                                   Serial.print("[ARQUIVO] "); Serial.print(nome);
-                                  Serial.print(" \t("); Serial.print(tamanho); Serial.println(" bytes)");
+                                  Serial.print(" \t("); Serial.print(tamanhoFormatado); Serial.println(")");
                               }
                           }
                       }
@@ -61,7 +75,7 @@ void acaoExplorador(MenuItem& item) {
               }
               
               FileNode* ponteirosNivel[10]; 
-              ponteirosNivel[0] = item.node; 
+              ponteirosNivel[0] = item.node;
               
               int pos = 0;
               while (pos < (int)dadosSD.length()) {

@@ -15,7 +15,7 @@ void desenharIcone(int x, int y, int tipo) {
     tft.drawFastHLine(x + 2, y + 5, 3, ST77XX_BLACK); 
     tft.drawFastVLine(x + 3, y + 4, 3, ST77XX_BLACK); 
     tft.drawPixel(x + 7, y + 6, ST77XX_RED);          
-    tft.drawPixel(x + 9, y + 4, ST77XX_RED);          
+    tft.drawPixel(x + 9, y + 4, ST77XX_RED);        
   } 
   else if (tipo == ICONE_MONITOR) {
     tft.fillRect(x + 1, y + 6, 4, 4, ST77XX_WHITE); 
@@ -28,13 +28,41 @@ void desenharIcone(int x, int y, int tipo) {
     tft.drawFastHLine(x + 3, y + 3, 3, COR_CINZA);
     tft.drawFastHLine(x + 3, y + 5, 3, COR_CINZA);
   }
+  else if (tipo == ICONE_MUSICA) {
+    tft.drawFastVLine(x + 3, y + 2, 5, ST77XX_WHITE);
+    tft.drawFastVLine(x + 7, y + 1, 5, ST77XX_WHITE);
+    tft.drawFastHLine(x + 4, y + 1, 4, ST77XX_WHITE);
+    tft.fillCircle(x + 2, y + 6, 2, ST77XX_WHITE);
+    tft.fillCircle(x + 6, y + 5, 2, ST77XX_WHITE);
+  }
+  else if (tipo == ICONE_TEXTO) {
+    tft.fillRect(x + 2, y + 1, 6, 8, ST77XX_WHITE);
+    tft.drawFastHLine(x + 3, y + 3, 4, ST77XX_BLACK);
+    tft.drawFastHLine(x + 3, y + 5, 4, ST77XX_BLACK);
+    tft.drawFastHLine(x + 3, y + 7, 2, ST77XX_BLACK);
+  }
 }
 
 void adicionarNoMenu(FileNode& dir, int indent) {
   for (size_t i = 0; i < dir.children.size(); i++) {
     MenuItem item;
     item.name = dir.children[i].name;
-    item.icon = dir.children[i].isDir ? (dir.children[i].expanded ? ICONE_PASTA_ABERTA : ICONE_PASTA_FECHADA) : ICONE_ARQUIVO;
+    
+    if (dir.children[i].isDir) {
+      item.icon = dir.children[i].expanded ? ICONE_PASTA_ABERTA : ICONE_PASTA_FECHADA;
+    } else {
+      String nomeUpper = dir.children[i].name;
+      nomeUpper.toUpperCase();
+      
+      if (nomeUpper.endsWith(".MP3") || nomeUpper.endsWith(".WAV") || nomeUpper.endsWith(".OGG") || nomeUpper.endsWith(".FLAC")) {
+        item.icon = ICONE_MUSICA;
+      } else if (nomeUpper.endsWith(".TXT") || nomeUpper.endsWith(".DAT") || nomeUpper.endsWith(".INI") || nomeUpper.endsWith(".CONFIG") || nomeUpper.endsWith(".CSV")) {
+        item.icon = ICONE_TEXTO;
+      } else {
+        item.icon = ICONE_ARQUIVO; 
+      }
+    }
+    
     item.actionId = 3;
     item.node = &dir.children[i];
     item.indent = indent;
@@ -48,7 +76,6 @@ void adicionarNoMenu(FileNode& dir, int indent) {
 
 void atualizarListaMenu() {
   menuAtual.clear();
-  
   MenuItem exp; 
   exp.name = sistemaArquivos.name; 
   exp.icon = sistemaArquivos.expanded ? ICONE_PASTA_ABERTA : ICONE_PASTA_FECHADA; 
@@ -56,17 +83,16 @@ void atualizarListaMenu() {
   exp.indent = 0; 
   exp.node = &sistemaArquivos;
   menuAtual.push_back(exp);
-  
+
   if (sistemaArquivos.expanded) {
     adicionarNoMenu(sistemaArquivos, 1);
   }
-  
+
   MenuItem s; s.name = "Snake"; s.icon = ICONE_JOYSTICK; s.actionId = 1; s.indent = 0; s.node = nullptr;
   menuAtual.push_back(s);
-  
   MenuItem a; a.name = "AudioPlayer"; a.icon = ICONE_MONITOR; a.actionId = 2; a.indent = 0; a.node = nullptr;
   menuAtual.push_back(a);
-  
+
   if (opcaoSelecionada >= (int)menuAtual.size()) {
     opcaoSelecionada = menuAtual.size() > 0 ? menuAtual.size() - 1 : 0;
   }
@@ -82,7 +108,7 @@ void desenharMenu() {
 
   tft.fillRect(menuX, menuY, menuW, menuH, ST77XX_BLACK);
   tft.setTextSize(1);
-  
+
   int maxVisible = menuH / 16;
   int startIdx = 0;
   if (opcaoSelecionada >= maxVisible) {
@@ -90,11 +116,10 @@ void desenharMenu() {
   }
 
   int drawY = menuY + 6;
-  
   for (size_t i = startIdx; i < menuAtual.size(); i++) {
-    if (drawY > menuY + menuH - 12) break; 
+    if (drawY > menuY + menuH - 12) break;
     
-    int baseX = menuX + 4 + (menuAtual[i].indent * 6); 
+    int baseX = menuX + 4 + (menuAtual[i].indent * 6);
     
     if (opcaoSelecionada == (int)i) {
       tft.fillRect(menuX + 2, drawY - 2, menuW - 4, 14, COR_FUNDO_SELECIONADO);
@@ -129,7 +154,6 @@ void desenharMenu() {
 
 void atualizarMarquee() {
   if (opcaoSelecionada >= (int)menuAtual.size()) return;
-  
   int topY = 15;
   int limiteX = (tft.width() * 0.6) + 4; 
   int menuX = limiteX + 1; 
@@ -140,12 +164,12 @@ void atualizarMarquee() {
   String txt = menuAtual[opcaoSelecionada].name;
   int baseX = menuX + 4 + (menuAtual[opcaoSelecionada].indent * 6);
   int maxChars = (menuW - (baseX - menuX) - 18) / 6;
-  
+
   if ((int)txt.length() <= maxChars) {
     marqueeOffset = 0;
     return;
   }
-  
+
   if (millis() - lastMarqueeUpdate > 300) {
     lastMarqueeUpdate = millis();
     marqueeOffset++;
@@ -163,7 +187,7 @@ void atualizarMarquee() {
       startIdx = opcaoSelecionada - maxVisible + 1;
     }
     
-    int drawY = menuY + 6 + ((opcaoSelecionada - startIdx) * 16); 
+    int drawY = menuY + 6 + ((opcaoSelecionada - startIdx) * 16);
     
     tft.fillRect(baseX + 16, drawY - 2, maxChars * 6, 14, COR_FUNDO_SELECIONADO);
     tft.setTextColor(ST77XX_WHITE);
@@ -177,20 +201,17 @@ void desenharCabecalho() {
   int maxCaracteres = (tft.width() - (margemEsquerda * 2)) / 6; 
   String textoCentral = " " + tituloAtual + " "; 
   int espacoRestante = maxCaracteres - textoCentral.length();
-  
   if (espacoRestante < 0) espacoRestante = 0; 
   String linha = "";
   for(int i = 0; i < (espacoRestante / 2); i++) linha += "=";
   linha += textoCentral;
   for(int i = 0; i < (espacoRestante - (espacoRestante / 2)); i++) linha += "=";
   tft.print(linha);
-  
+
   int topY = 15; 
   tft.drawRect(2, topY, tft.width() - 4, tft.height() - topY - 2, ST77XX_WHITE);
-  
   int limiteX = (tft.width() * 0.6) + 4;
   tft.drawFastVLine(limiteX, topY, tft.height() - topY - 2, ST77XX_WHITE);
-  
   desenharMenu();
 }
 
@@ -198,10 +219,12 @@ void desenharPopup(int segundos) {
   int larg = 190, alt = 60;
   int x = (tft.width() - larg) / 2;
   int y = (tft.height() - alt) / 2;
+
   if (segundos == 3) {
     tft.fillRect(x, y, larg, alt, ST77XX_BLACK);
     tft.drawRect(x, y, larg, alt, ST77XX_WHITE);
   }
+
   tft.setTextSize(1); tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
   tft.setCursor(x + 10, y + 10); tft.print("Para desligar,");
   tft.setCursor(x + 10, y + 25); tft.print("pressione de novo: ");
@@ -224,15 +247,13 @@ void fecharPopup() {
 void exibirBootlogoComando() {
   tft.fillScreen(ST77XX_BLACK); 
   tft.setTextColor(ST77XX_WHITE);
-  
   String logoTexto = "S.I.A.T";
   String logoSimbolo = "(c)"; 
-  
   int larguraCharSize3 = 18; 
   int alturaCharSize3 = 24;  
   int alturaCharSize1 = 8;
   int larguraCharSize1 = 6;
-  
+
   int wTexto = logoTexto.length() * larguraCharSize3;
   int logoX = (tft.width() - wTexto) / 2;
   int logoY = (tft.height() - alturaCharSize3) / 2 - 15; 
@@ -249,31 +270,26 @@ void exibirBootlogoComando() {
   tft.setTextSize(1);
   String footer1 = "satter's S.I.A.T";
   String footer2 = "terminal v2.6"; 
-  
   int f1W = footer1.length() * larguraCharSize1;
   int f2W = footer2.length() * larguraCharSize1;
-  
   int f2Y = tft.height() - alturaCharSize1 - 5; 
   int f1Y = f2Y - 12; 
-  
   int f1X = (tft.width() - f1W) / 2;
   int f2X = (tft.width() - f2W) / 2;
-  
+
   tft.setCursor(f1X, f1Y);
   tft.print(footer1);
-  
   tft.setCursor(f2X, f2Y);
   tft.print(footer2);
-  
+
   while (!Serial.available()) {
     delay(10);
   }
-  
   while (Serial.available()) {
     Serial.read();
     delay(2);
   }
-  
+
   if (scrollLinha > 0) {
     renderizarScroll();
   } else {
@@ -284,15 +300,13 @@ void exibirBootlogoComando() {
 void animacaoDeBoot() {
   tft.fillScreen(ST77XX_BLACK); 
   tft.setTextColor(ST77XX_WHITE);
-  
   String logoTexto = "S.I.A.T";
   String logoSimbolo = "(c)"; 
-  
   int larguraCharSize3 = 18; 
   int alturaCharSize3 = 24;  
   int alturaCharSize1 = 8;
   int larguraCharSize1 = 6;
-  
+
   int wTexto = logoTexto.length() * larguraCharSize3;
   int logoX = (tft.width() - wTexto) / 2;
   int logoY = (tft.height() - alturaCharSize3) / 2 - 15; 
@@ -309,45 +323,38 @@ void animacaoDeBoot() {
   tft.setTextSize(1);
   String footer1 = "satter's S.I.A.T";
   String footer2 = "terminal v2.6"; 
-  
   int f1W = footer1.length() * larguraCharSize1;
   int f2W = footer2.length() * larguraCharSize1;
-  
   int f2Y = tft.height() - alturaCharSize1 - 5; 
   int f1Y = f2Y - 12; 
-  
   int f1X = (tft.width() - f1W) / 2;
   int f2X = (tft.width() - f2W) / 2;
-  
+
   tft.setCursor(f1X, f1Y);
   tft.print(footer1);
-  
   tft.setCursor(f2X, f2Y);
   tft.print(footer2);
-  
+
   delay(2500);
-  
+
   tft.fillScreen(ST77XX_BLACK);
   desenharCabecalho();
-  
+
   cursorX = margemEsquerda; 
   cursorY = inicioTextoY + 12; 
   limparCache();
 
   tft.setTextColor(COR_CINZA);
   tft.setTextSize(1);
-  
   tft.setCursor(margemEsquerda, cursorY);
   tft.print("Linguagem: PT-BR");
   cursorY += 12;
-  
   tft.setCursor(margemEsquerda, cursorY);
   tft.print("Feito por: satter");
   cursorY += 12;
-  
   tft.setCursor(margemEsquerda, cursorY);
   tft.print("Sistema Iniciado.");
-  
+
   cursorX = margemEsquerda; 
   cursorY = inicioTextoY;
   escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
@@ -356,13 +363,11 @@ void animacaoDeBoot() {
 void escreverEfeitoDigitacao(const String& texto, int tamanhoFonte, uint16_t cor) {
   tft.setTextSize(tamanhoFonte); 
   tft.setTextColor(cor);
-  
   int larguraLetra = 6 * tamanhoFonte;
   int limiteTextoX = (tft.width() * 0.6) - 4; 
 
   for (size_t i = 0; i < texto.length(); i++) {
     if (Serial.available()) return;
-
     char letra = texto[i];
     if (letra < 0 || letra > 127) continue; 
     
@@ -377,7 +382,6 @@ void escreverEfeitoDigitacao(const String& texto, int tamanhoFonte, uint16_t cor
         int espacoRestanteX = limiteTextoX - cursorX;
         int caracteresQueCabem = espacoRestanteX / larguraLetra;
         int caracteresSaindo = caracteresPalavra - caracteresQueCabem;
-
         if (caracteresQueCabem <= 0 || caracteresSaindo < 4) {
           avancarLinha(cor, tamanhoFonte);
         }
@@ -385,7 +389,7 @@ void escreverEfeitoDigitacao(const String& texto, int tamanhoFonte, uint16_t cor
     }
 
     if (cursorX == margemEsquerda && letra == ' ') continue;
-    
+
     if (cursorX + larguraLetra > limiteTextoX) {
       if (letra == ' ') {
         avancarLinha(cor, tamanhoFonte);
@@ -394,10 +398,8 @@ void escreverEfeitoDigitacao(const String& texto, int tamanhoFonte, uint16_t cor
       else {
         tft.setCursor(cursorX, cursorY);
         tft.print('-'); 
-        adicionarAoCache('-', cor); 
-        
-        avancarLinha(cor, tamanhoFonte);
-        
+        adicionarAoCache('-', cor);         
+        avancarLinha(cor, tamanhoFonte);        
         tft.setCursor(cursorX, cursorY);
         tft.print('-'); 
         adicionarAoCache('-', cor); 
