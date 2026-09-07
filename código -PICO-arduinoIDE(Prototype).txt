@@ -1,0 +1,142 @@
+#include <SPI.h>
+#include <SD.h> 
+
+// --- DEFINIÇÃO DOS PINOS DO CARTÃO SD (SPI0) ---
+const int PINO_MISO   = 0; 
+const int PINO_CS     = 1; 
+const int PINO_SCK    = 2; 
+const int PINO_MOSI   = 3; 
+const int PINO_DETECT = 4; 
+
+bool cartao_conectado = false;
+bool mensagem_aguardando_exibida = false;
+unsigned long tempo_anterior_serial = 0;
+
+// Variável Global para manter os dados estruturados do SD
+String cacheSD = "";
+
+// Função para varrer todo o SD e compactar numa string leve
+void construirCache(File dir, int nivel = 0) {
+  if(nivel == 0) cacheSD = ""; // Reseta caso inicie do zero
+  
+  while (true) {
+    File entry = dir.openNextFile();
+    if (!entry) break;
+
+    if (entry.isDirectory()) {
+      cacheSD += "D|" + String(nivel) + "|" + entry.name() + "\n";
+      construirCache(entry, nivel + 1); // Chamada recursiva para pastas internas
+    } else {
+      cacheSD += "F|" + String(nivel) + "|" + entry.name() + "|" + entry.size() + "\n";
+    }
+    entry.close();
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // --- CONFIGURAÇÃO E INICIALIZAÇÃO DA UART PICO ---
+  Serial2.setTX(20);
+  Serial2.setRX(21);
+  Serial2.begin(115200);
+  Serial2.setTimeout(20);
+  
+  unsigned long inicio_usb = millis();
+  while (!Serial && (millis() - inicio_usb < 4000)) {
+    delay(10);
+  }
+  
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+  pinMode(PINO_DETECT, INPUT_PULLUP);
+  
+  SPI.setRX(PINO_MISO); 
+  SPI.setCS(PINO_CS);   
+  SPI.setSCK(PINO_SCK); 
+  SPI.setTX(PINO_MOSI); 
+  SPI.begin();
+
+  if (digitalRead(PINO_DETECT) == LOW) {
+    Serial.println("\nCartao detectado no boot. Inicializando SD...");
+    if (SD.begin(PINO_CS)) {
+      cartao_conectado = true;
+      mensagem_aguardando_exibida = false;
+      
+      File root = SD.open("/");
+      if (root) {
+        Serial.println("Lendo cartao e gerando cache...");
+        construirCache(root, 0); // Gera o cache em background
+        root.close();
+        Serial.println("(aguardando ESP32...)");
+      }
+    } else {
+      Serial.println("[ERRO] Falha na comunicacao SPI com o cartao.");
+    }
+  }
+  
+  tempo_anterior_serial = millis(); 
+}
+
+void loop() {
+  unsigned long tempo_atual = millis();
+  bool cartao_inserido_fisicamente = (digitalRead(PINO_DETECT) == LOW);
+
+  if (cartao_conectado && !cartao_inserido_fisicamente) {
+    cartao_conectado = false;
+    mensagem_aguardando_exibida = false;
+    SD.end();
+    cacheSD = ""; // Esvazia o buffer de cache se remover
+    Serial.println("\n[ALERTA] Cartao MicroSD foi removido fisicamente!");
+    digitalWrite(LED_BUILTIN, LOW);
+  }
+
+  if (!cartao_conectado) {
+    if (tempo_atual % 2000 < 500) digitalWrite(LED_BUILTIN, HIGH);
+    else digitalWrite(LED_BUILTIN, LOW);
+
+    if (tempo_atual - tempo_anterior_serial >= 3000) {
+      tempo_anterior_serial = tempo_atual;
+      
+      if (cartao_inserido_fisicamente) {
+        if (SD.begin(PINO_CS)) {
+          cartao_conectado = true;
+          mensagem_aguardando_exibida = false;
+          Serial.println("[SUCESSO] Cartao MicroSD reconhecido!");
+          File root = SD.open("/");
+          if (root) {
+            Serial.println("Lendo cartao e gerando cache...");
+            construirCache(root, 0);
+            root.close();
+            Serial.println("(aguardando ESP32...)");
+          }
+        }
+      } else {
+        if (!mensagem_aguardando_exibida) {
+          Serial.println("Aguardando insercao do cartao MicroSD...");
+          mensagem_aguardando_exibida = true;
+        }
+      }
+    }
+  } else {
+    digitalWrite(LED_BUILTIN, HIGH);
+  }
+
+  // --- ESCUTANDO A UART CONTINUAMENTE ---
+  if (Serial2.available()) {
+    String recebido = Serial2.readStringUntil('\n');
+    recebido.trim();
+    if (recebido.length() > 0) {
+      if (recebido == "DADOS_SD") {
+         // O ESP32 abriu o EA e pediu a lista.
+         Serial.println("Solicitacao de DADOS_SD recebida. Enviando cache...");
+         Serial2.println("INICIO_SD");
+         Serial2.print(cacheSD);
+         Serial2.println("FIM_SD");
+      } else {
+         // Exibe qualquer outra coisa caso o ESP32 mande textos livres futuramente.
+         Serial.println("ESP32 MANDOU: " + recebido);
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"name": "ESP32_firmware",
+			"path": "ESP32_firmware"
+		},
+		{
+			"path": "pico_firmware"
+		}
+	],
+	"settings": {}
+}

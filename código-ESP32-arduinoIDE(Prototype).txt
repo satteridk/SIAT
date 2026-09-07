@@ -1,0 +1,1304 @@
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7789.h>
+#include <SPI.h>
+#include <driver/rtc_io.h>
+#include <MathParser_Arduino.h>
+#include <vector>
+
+// ==========================================
+// --- MAPEAMENTO DOS PINOS ---
+// ==========================================
+#define TFT_CS     5
+#define TFT_RST    4
+#define TFT_DC     2
+#define TFT_MOSI  23
+#define TFT_SCLK  18
+#define PINO_BOTAO 13
+#define PINO_TELA  15 
+
+Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
+
+// ==========================================
+// --- CORES PADRONIZADAS ---
+// ==========================================
+#define COR_CINZA tft.color565(130, 130, 130)
+#define COR_FUNDO_SELECIONADO tft.color565(50, 50, 50) 
+
+// ==========================================
+// --- CONFIGURAÇÕES E VARIÁVEIS GERAIS ---
+// ==========================================
+MathParser parser;
+const int margemEsquerda = 5;
+const int inicioTextoY = 20;
+const int intervaloBlink = 400; 
+
+int cursorX = margemEsquerda;
+int cursorY = inicioTextoY;
+unsigned long tempoUltimoBlink = 0;
+bool cursorVisivel = false;
+bool esperandoTexto = true; 
+String tituloAtual = "TERMINAL V2.5";
+bool modoComando = true; 
+bool modoCalc = false;
+bool telaInicialCreditos = true;
+
+// --- Variáveis do Popup ---
+bool popupAberto = false;
+unsigned long tempoAberturaPopup = 0;
+int segundosRestantes = 3;
+bool estadoAnteriorBotao = HIGH;
+unsigned long ultimoDebounce = 0;
+
+// ==========================================
+// --- SISTEMA DE ARQUIVOS E MENU LATERAL ---
+// ==========================================
+#define ICONE_PASTA_FECHADA 0
+#define ICONE_PASTA_ABERTA 1
+#define ICONE_JOYSTICK 2
+#define ICONE_MONITOR 3
+#define ICONE_ARQUIVO 5
+
+struct FileNode {
+  String name;
+  String path;
+  bool isDir;
+  bool expanded;
+  std::vector<FileNode> children;
+};
+
+struct MenuItem {
+  String name;
+  int icon;
+  int actionId; 
+  FileNode* node;
+  int indent;
+};
+
+FileNode sistemaArquivos;
+std::vector<MenuItem> menuAtual;
+int opcaoSelecionada = 0;
+
+int marqueeOffset = 0;
+unsigned long lastMarqueeUpdate = 0;
+
+void desenharMenu(); 
+void desenharCabecalho(); 
+void escreverEfeitoDigitacao(const String& texto, int tamanhoFonte, uint16_t cor);
+void avancarLinha(uint16_t corRestaurar = ST77XX_GREEN, int tamanhoFonteRestaurar = 1);
+void atualizarListaMenu();
+
+// ==========================================
+// --- VARIÁVEIS DO JOGO SNAKE ---
+// ==========================================
+bool modoSnake = false;
+bool forcarRedrawSnake = false; 
+#define MAX_SNAKE_LEN 150
+int snakeX[MAX_SNAKE_LEN];
+int snakeY[MAX_SNAKE_LEN];
+int snakeLength = 3;
+int snakeDir = 1; 
+int lastSnakeDir = 1; 
+int foodX = 0;
+int foodY = 0;
+int snakeScore = 0;
+unsigned long tempoUltimoMovimentoSnake = 0;
+int velocidadeSnake = 120;
+const int tamanhoBloco = 6;
+int gameAreaX, gameAreaY, gameAreaW, gameAreaH;
+
+// ==========================================
+// --- SISTEMA DE CACHE E SCROLL ---
+// ==========================================
+const int MAX_LINHAS_CACHE = 200;
+#define MAX_CHARS_LINHA 50 
+
+String cacheLinhas[MAX_LINHAS_CACHE];
+uint16_t cacheCores[MAX_LINHAS_CACHE][MAX_CHARS_LINHA]; 
+int idxLinhaCache = 0;
+int indiceLinhaInicioPagina = 0;
+int scrollLinha = 0;
+
+void limparCache() {
+  for(int i = 0; i < MAX_LINHAS_CACHE; i++) {
+    cacheLinhas[i] = "";
+    cacheLinhas[i].reserve(MAX_CHARS_LINHA + 5); 
+    for(int j = 0; j < MAX_CHARS_LINHA; j++) {
+      cacheCores[i][j] = ST77XX_GREEN; 
+    }
+  }
+  idxLinhaCache = 0;
+  indiceLinhaInicioPagina = 0;
+  scrollLinha = 0;
+}
+
+void novaLinhaCache() {
+  idxLinhaCache++;
+  if (idxLinhaCache >= MAX_LINHAS_CACHE) {
+    for(int k = 1; k < MAX_LINHAS_CACHE; k++) {
+      cacheLinhas[k-1] = cacheLinhas[k];
+      for(int c = 0; c < MAX_CHARS_LINHA; c++) {
+        cacheCores[k-1][c] = cacheCores[k][c];
+      }
+    }
+    idxLinhaCache = MAX_LINHAS_CACHE - 1;
+    if (indiceLinhaInicioPagina > 0) indiceLinhaInicioPagina--;
+  }
+  cacheLinhas[idxLinhaCache] = "";
+  for(int c = 0; c < MAX_CHARS_LINHA; c++) {
+    cacheCores[idxLinhaCache][c] = ST77XX_GREEN;
+  }
+}
+
+void adicionarAoCache(char c, uint16_t cor) {
+  int pos = cacheLinhas[idxLinhaCache].length();
+  if (pos < MAX_CHARS_LINHA) {
+    cacheCores[idxLinhaCache][pos] = cor;
+  }
+  cacheLinhas[idxLinhaCache] += c;
+}
+
+void desenharLinhaCache(int indice, int y) {
+  int currX = margemEsquerda;
+  int len = cacheLinhas[indice].length();
+  int startIdx = 0;
+  
+  while(startIdx < len) {
+     uint16_t cCor = (startIdx < MAX_CHARS_LINHA) ? cacheCores[indice][startIdx] : ST77XX_GREEN;
+     String chunk = "";
+     int j = startIdx;
+     
+     while (j < len && ((j < MAX_CHARS_LINHA && cacheCores[indice][j] == cCor) || (j >= MAX_CHARS_LINHA && cCor == ST77XX_GREEN))) {
+        chunk += cacheLinhas[indice][j];
+        j++;
+     }
+     tft.setTextColor(cCor);
+     tft.setCursor(currX, y);
+     tft.print(chunk);
+     currX += chunk.length() * 6; 
+     startIdx = j;
+  }
+}
+
+void restaurarPaginaAtual() {
+  tft.fillScreen(ST77XX_BLACK);
+  desenharCabecalho();
+  int tempY = inicioTextoY;
+  tft.setTextSize(1);
+  for (int i = indiceLinhaInicioPagina; i <= idxLinhaCache; i++) {
+    if (i >= 0 && i < MAX_LINHAS_CACHE) {
+      desenharLinhaCache(i, tempY);
+      tempY += 12;
+    }
+  }
+}
+
+void renderizarScroll() {
+  tft.fillScreen(ST77XX_BLACK);
+  desenharCabecalho();
+  tft.setTextSize(1);
+
+  int maxLinhasTela = (tft.height() - 4 - inicioTextoY) / 12;
+  int linhaFim = idxLinhaCache - scrollLinha;
+  int linhaInicio = linhaFim - maxLinhasTela + 1;
+  
+  if (linhaInicio < 0) linhaInicio = 0;
+
+  int tempY = inicioTextoY;
+  for (int i = linhaInicio; i <= linhaFim; i++) {
+    if (i >= 0 && i < MAX_LINHAS_CACHE) {
+      desenharLinhaCache(i, tempY);
+      tempY += 12; 
+    }
+  }
+}
+
+void avancarLinha(uint16_t corRestaurar, int tamanhoFonteRestaurar) {
+  cursorX = margemEsquerda;
+  cursorY += 12;
+  novaLinhaCache();
+  
+  int limiteTextoY = tft.height() - 4;
+  
+  if (cursorY + 8 > limiteTextoY) {
+    indiceLinhaInicioPagina++;
+    cursorY -= 12; 
+    restaurarPaginaAtual();
+    tft.setTextColor(corRestaurar);
+    tft.setTextSize(tamanhoFonteRestaurar);
+  }
+}
+
+// ==========================================
+// --- FUNÇÕES DE APOIO E GRÁFICOS ---
+// ==========================================
+String limparAcentos(const String& textoOriginal) {
+  String texto = textoOriginal;
+  texto.replace("á","a"); texto.replace("à","a"); texto.replace("ã","a"); texto.replace("â","a");
+  texto.replace("é","e"); texto.replace("ê","e"); texto.replace("í","i");
+  texto.replace("ó","o"); texto.replace("õ","o"); texto.replace("ô","o"); texto.replace("ú","u");
+  texto.replace("ç","c"); 
+  texto.replace("Á","A"); texto.replace("Ã","A"); texto.replace("É","E");
+  texto.replace("Í","I"); texto.replace("Ó","O"); texto.replace("Õ","O"); texto.replace("Ú","U");
+  texto.replace("Ç","C"); 
+  return texto;
+}
+
+void desenharIcone(int x, int y, int tipo) {
+  if (tipo == ICONE_PASTA_FECHADA) {
+    tft.fillRect(x, y + 2, 10, 7, tft.color565(255, 215, 0)); 
+    tft.fillRect(x, y, 5, 2, tft.color565(255, 215, 0));
+  } 
+  else if (tipo == ICONE_PASTA_ABERTA) {
+    tft.fillRect(x, y + 2, 10, 7, tft.color565(255, 215, 0)); 
+    tft.fillRect(x, y, 5, 2, tft.color565(255, 215, 0));      
+    tft.fillRect(x + 1, y + 4, 10, 6, tft.color565(255, 245, 150)); 
+  } 
+  else if (tipo == ICONE_JOYSTICK) {
+    tft.fillRoundRect(x, y + 2, 11, 7, 2, ST77XX_WHITE);
+    tft.drawFastHLine(x + 2, y + 5, 3, ST77XX_BLACK); 
+    tft.drawFastVLine(x + 3, y + 4, 3, ST77XX_BLACK); 
+    tft.drawPixel(x + 7, y + 6, ST77XX_RED);          
+    tft.drawPixel(x + 9, y + 4, ST77XX_RED);          
+  } 
+  else if (tipo == ICONE_MONITOR) {
+    tft.fillRect(x + 1, y + 6, 4, 4, ST77XX_WHITE); 
+    tft.drawFastVLine(x + 4, y + 0, 7, ST77XX_WHITE); 
+    tft.fillRect(x + 5, y + 0, 3, 2, ST77XX_WHITE); 
+    tft.drawPixel(x + 8, y + 2, ST77XX_WHITE);
+  }
+  else if (tipo == ICONE_ARQUIVO) {
+    tft.fillRect(x + 2, y + 1, 6, 8, ST77XX_WHITE);
+    tft.drawFastHLine(x + 3, y + 3, 3, COR_CINZA);
+    tft.drawFastHLine(x + 3, y + 5, 3, COR_CINZA);
+  }
+}
+
+void adicionarNoMenu(FileNode& dir, int indent) {
+  for (size_t i = 0; i < dir.children.size(); i++) {
+    MenuItem item;
+    item.name = dir.children[i].name;
+    item.icon = dir.children[i].isDir ? (dir.children[i].expanded ? ICONE_PASTA_ABERTA : ICONE_PASTA_FECHADA) : ICONE_ARQUIVO;
+    item.actionId = 3;
+    item.node = &dir.children[i];
+    item.indent = indent;
+    menuAtual.push_back(item);
+    
+    if (dir.children[i].isDir && dir.children[i].expanded) {
+      adicionarNoMenu(dir.children[i], indent + 1);
+    }
+  }
+}
+
+void atualizarListaMenu() {
+  menuAtual.clear();
+  
+  MenuItem exp; 
+  exp.name = sistemaArquivos.name; 
+  exp.icon = sistemaArquivos.expanded ? ICONE_PASTA_ABERTA : ICONE_PASTA_FECHADA; 
+  exp.actionId = 3; 
+  exp.indent = 0; 
+  exp.node = &sistemaArquivos;
+  menuAtual.push_back(exp);
+  
+  if (sistemaArquivos.expanded) {
+    adicionarNoMenu(sistemaArquivos, 1);
+  }
+  
+  MenuItem s; s.name = "Snake"; s.icon = ICONE_JOYSTICK; s.actionId = 1; s.indent = 0; s.node = nullptr;
+  menuAtual.push_back(s);
+  
+  MenuItem a; a.name = "AudioPlayer"; a.icon = ICONE_MONITOR; a.actionId = 2; a.indent = 0; a.node = nullptr;
+  menuAtual.push_back(a);
+  
+  if (opcaoSelecionada >= (int)menuAtual.size()) {
+    opcaoSelecionada = menuAtual.size() > 0 ? menuAtual.size() - 1 : 0;
+  }
+}
+
+void desenharMenu() {
+  int topY = 15;
+  int limiteX = (tft.width() * 0.6) + 4; 
+  int menuX = limiteX + 1; 
+  int menuY = topY + 1;
+  int menuW = tft.width() - limiteX - 4; 
+  int menuH = tft.height() - topY - 4; 
+
+  tft.fillRect(menuX, menuY, menuW, menuH, ST77XX_BLACK);
+  tft.setTextSize(1);
+  
+  int maxVisible = menuH / 16;
+  int startIdx = 0;
+  if (opcaoSelecionada >= maxVisible) {
+    startIdx = opcaoSelecionada - maxVisible + 1;
+  }
+
+  int drawY = menuY + 6;
+  
+  for (size_t i = startIdx; i < menuAtual.size(); i++) {
+    if (drawY > menuY + menuH - 12) break; 
+    
+    int baseX = menuX + 4 + (menuAtual[i].indent * 6); 
+    
+    if (opcaoSelecionada == (int)i) {
+      tft.fillRect(menuX + 2, drawY - 2, menuW - 4, 14, COR_FUNDO_SELECIONADO);
+      tft.setTextColor(ST77XX_WHITE);
+    } else {
+      tft.setTextColor(COR_CINZA);
+    }
+    
+    if (menuAtual[i].indent > 0) {
+      tft.drawFastVLine(baseX - 4, drawY - 8, 14, COR_CINZA);
+      tft.drawFastHLine(baseX - 4, drawY + 4, 6, COR_CINZA);
+    }
+    
+    desenharIcone(baseX, drawY, menuAtual[i].icon);
+    
+    String txt = menuAtual[i].name;
+    int maxChars = (menuW - (baseX - menuX) - 18) / 6;
+    
+    if (opcaoSelecionada == (int)i && (int)txt.length() > maxChars) {
+      int offset = min(marqueeOffset, (int)(txt.length() - maxChars));
+      txt = txt.substring(offset, offset + maxChars);
+    } else if ((int)txt.length() > maxChars) {
+      txt = txt.substring(0, maxChars);
+    }
+    
+    tft.setCursor(baseX + 16, drawY + 2);
+    tft.print(txt);
+    
+    drawY += 16;
+  }
+}
+
+void atualizarMarquee() {
+  if (opcaoSelecionada >= (int)menuAtual.size()) return;
+  
+  int topY = 15;
+  int limiteX = (tft.width() * 0.6) + 4; 
+  int menuX = limiteX + 1; 
+  int menuY = topY + 1;
+  int menuW = tft.width() - limiteX - 4; 
+  int menuH = tft.height() - topY - 4; 
+
+  String txt = menuAtual[opcaoSelecionada].name;
+  int baseX = menuX + 4 + (menuAtual[opcaoSelecionada].indent * 6);
+  int maxChars = (menuW - (baseX - menuX) - 18) / 6;
+  
+  if ((int)txt.length() <= maxChars) {
+    marqueeOffset = 0;
+    return;
+  }
+  
+  if (millis() - lastMarqueeUpdate > 300) {
+    lastMarqueeUpdate = millis();
+    marqueeOffset++;
+    
+    if (marqueeOffset > (int)txt.length() - maxChars + 4) {
+      marqueeOffset = 0;
+    }
+    
+    int renderOffset = min(marqueeOffset, (int)(txt.length() - maxChars));
+    String renderTxt = txt.substring(renderOffset, renderOffset + maxChars);
+    
+    int maxVisible = menuH / 16;
+    int startIdx = 0;
+    if (opcaoSelecionada >= maxVisible) {
+      startIdx = opcaoSelecionada - maxVisible + 1;
+    }
+    
+    int drawY = menuY + 6 + ((opcaoSelecionada - startIdx) * 16); 
+    
+    tft.fillRect(baseX + 16, drawY - 2, maxChars * 6, 14, COR_FUNDO_SELECIONADO);
+    tft.setTextColor(ST77XX_WHITE);
+    tft.setCursor(baseX + 16, drawY + 2);
+    tft.print(renderTxt);
+  }
+}
+
+void desenharCabecalho() {
+  tft.setTextSize(1); tft.setTextColor(ST77XX_WHITE); tft.setCursor(margemEsquerda, 5);
+  int maxCaracteres = (tft.width() - (margemEsquerda * 2)) / 6; 
+  String textoCentral = " " + tituloAtual + " "; 
+  int espacoRestante = maxCaracteres - textoCentral.length();
+  
+  if (espacoRestante < 0) espacoRestante = 0; 
+  String linha = "";
+  for(int i = 0; i < (espacoRestante / 2); i++) linha += "=";
+  linha += textoCentral;
+  for(int i = 0; i < (espacoRestante - (espacoRestante / 2)); i++) linha += "=";
+  tft.print(linha);
+  
+  int topY = 15; 
+  tft.drawRect(2, topY, tft.width() - 4, tft.height() - topY - 2, ST77XX_WHITE);
+  
+  int limiteX = (tft.width() * 0.6) + 4;
+  tft.drawFastVLine(limiteX, topY, tft.height() - topY - 2, ST77XX_WHITE);
+  
+  desenharMenu();
+}
+
+// ==========================================
+// --- SISTEMA E LÓGICA DO SNAKE GAME ---
+// ==========================================
+void atualizarPlacarSnake() {
+  tft.fillRect(1, 1, tft.width()-2, 17, ST77XX_BLACK); 
+  tft.setTextSize(1);
+  tft.setTextColor(ST77XX_WHITE);
+  
+  char placarStr[20];
+  sprintf(placarStr, "SCORE: %06d", snakeScore);
+  
+  int larguraTexto = 13 * 6; 
+  int centroX = (tft.width() - larguraTexto) / 2;
+  
+  tft.setCursor(centroX, 6);
+  tft.print(placarStr);
+}
+
+void gerarComidaSnake() {
+  int maxX = gameAreaW / tamanhoBloco;
+  int maxY = gameAreaH / tamanhoBloco;
+  bool valido = false;
+  
+  while(!valido) {
+    foodX = random(0, maxX);
+    foodY = random(0, maxY);
+    valido = true;
+    for(int i = 0; i < snakeLength; i++) {
+      if(snakeX[i] == foodX && snakeY[i] == foodY) {
+        valido = false; 
+        break;
+      }
+    }
+  }
+  
+  int realX = gameAreaX + (foodX * tamanhoBloco);
+  int realY = gameAreaY + (foodY * tamanhoBloco);
+  tft.fillCircle(realX + tamanhoBloco/2, realY + tamanhoBloco/2, tamanhoBloco/2 - 1, ST77XX_WHITE);
+}
+
+void resetarFaseSnake() {
+  snakeLength = 3;
+  snakeDir = 1;
+  lastSnakeDir = 1;
+  velocidadeSnake = 120;
+  
+  int startX = (gameAreaW / tamanhoBloco) / 2;
+  int startY = (gameAreaH / tamanhoBloco) / 2;
+  
+  for(int i = 0; i < snakeLength; i++) {
+    snakeX[i] = startX - i;
+    snakeY[i] = startY;
+  }
+  
+  tft.fillRect(gameAreaX, gameAreaY, gameAreaW, gameAreaH, ST77XX_BLACK);
+  gerarComidaSnake();
+}
+
+void iniciarSnake() {
+  modoSnake = true;
+  snakeScore = 0;
+  
+  tft.fillScreen(ST77XX_BLACK);
+  tft.drawRect(0, 0, tft.width(), tft.height(), ST77XX_WHITE);
+  tft.drawFastHLine(0, 19, tft.width(), ST77XX_WHITE);
+  
+  gameAreaX = 1;
+  gameAreaY = 20;
+  gameAreaW = tft.width() - 2;
+  int rawH = tft.height() - 21;
+  gameAreaH = rawH - (rawH % tamanhoBloco); 
+  
+  atualizarPlacarSnake();
+  resetarFaseSnake();
+  tempoUltimoMovimentoSnake = millis();
+}
+
+void sairSnake() {
+  modoSnake = false;
+  if (scrollLinha > 0) {
+    renderizarScroll();
+  } else {
+    restaurarPaginaAtual();
+  }
+  if (modoComando) {
+    if (cursorX > margemEsquerda) {
+      avancarLinha();
+    }
+    escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
+  }
+}
+
+void atualizarJogoSnake() {
+  if (forcarRedrawSnake) {
+    tft.fillScreen(ST77XX_BLACK);
+    tft.drawRect(0, 0, tft.width(), tft.height(), ST77XX_WHITE);
+    tft.drawFastHLine(0, 19, tft.width(), ST77XX_WHITE);
+    atualizarPlacarSnake();
+    
+    for(int i = 0; i < snakeLength; i++) {
+      int px = gameAreaX + (snakeX[i] * tamanhoBloco);
+      int py = gameAreaY + (snakeY[i] * tamanhoBloco);
+      tft.fillRect(px, py, tamanhoBloco - 1, tamanhoBloco - 1, ST77XX_WHITE);
+    }
+    int realX = gameAreaX + (foodX * tamanhoBloco);
+    int realY = gameAreaY + (foodY * tamanhoBloco);
+    tft.fillCircle(realX + tamanhoBloco/2, realY + tamanhoBloco/2, tamanhoBloco/2 - 1, ST77XX_WHITE);
+    
+    forcarRedrawSnake = false;
+  }
+
+  if (millis() - tempoUltimoMovimentoSnake < (unsigned long)velocidadeSnake) return;
+  tempoUltimoMovimentoSnake = millis();
+  
+  lastSnakeDir = snakeDir; 
+
+  int tailX = gameAreaX + (snakeX[snakeLength-1] * tamanhoBloco);
+  int tailY = gameAreaY + (snakeY[snakeLength-1] * tamanhoBloco);
+  tft.fillRect(tailX, tailY, tamanhoBloco, tamanhoBloco, ST77XX_BLACK); 
+
+  for (int i = snakeLength - 1; i > 0; i--) {
+    snakeX[i] = snakeX[i-1];
+    snakeY[i] = snakeY[i-1];
+  }
+
+  if (snakeDir == 0) snakeY[0]--;
+  else if (snakeDir == 1) snakeX[0]++;
+  else if (snakeDir == 2) snakeY[0]++;
+  else if (snakeDir == 3) snakeX[0]--;
+
+  int maxX = gameAreaW / tamanhoBloco;
+  int maxY = gameAreaH / tamanhoBloco;
+
+  bool morreu = false;
+
+  if (snakeX[0] < 0 || snakeX[0] >= maxX || snakeY[0] < 0 || snakeY[0] >= maxY) {
+    morreu = true;
+  }
+
+  for (int i = 1; i < snakeLength; i++) {
+    if (snakeX[0] == snakeX[i] && snakeY[0] == snakeY[i]) {
+      morreu = true;
+    }
+  }
+
+  if (morreu) {
+    delay(500); 
+    snakeScore = 0; 
+    atualizarPlacarSnake();
+    resetarFaseSnake();
+    return;
+  }
+
+  if (snakeX[0] == foodX && snakeY[0] == foodY) {
+    if (snakeLength < MAX_SNAKE_LEN) snakeLength++;
+    snakeScore += 100;
+    atualizarPlacarSnake();
+    gerarComidaSnake();
+    velocidadeSnake = max(50, velocidadeSnake - 3); 
+  }
+
+  for (int i = 0; i < snakeLength; i++) {
+    int px = gameAreaX + (snakeX[i] * tamanhoBloco);
+    int py = gameAreaY + (snakeY[i] * tamanhoBloco);
+    tft.fillRect(px, py, tamanhoBloco - 1, tamanhoBloco - 1, ST77XX_WHITE);
+  }
+}
+
+// ==========================================
+// --- SISTEMA POPUP E BOOT ---
+// ==========================================
+void desenharPopup(int segundos) {
+  int larg = 190, alt = 60;
+  int x = (tft.width() - larg) / 2;
+  int y = (tft.height() - alt) / 2;
+  if (segundos == 3) {
+    tft.fillRect(x, y, larg, alt, ST77XX_BLACK);
+    tft.drawRect(x, y, larg, alt, ST77XX_WHITE);
+  }
+  tft.setTextSize(1); tft.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+  tft.setCursor(x + 10, y + 10); tft.print("Para desligar,");
+  tft.setCursor(x + 10, y + 25); tft.print("pressione de novo: ");
+  tft.print(segundos); tft.print("s  ");    
+}
+
+void fecharPopup() {
+  popupAberto = false;
+  if (modoSnake) {
+    forcarRedrawSnake = true; 
+  } else {
+    if (scrollLinha > 0) {
+      renderizarScroll();
+    } else {
+      restaurarPaginaAtual();
+    }
+  }
+}
+
+void desligarSistema() {
+  tft.fillScreen(ST77XX_BLACK); tft.setTextSize(1); tft.setTextColor(ST77XX_WHITE);
+  String l1 = "------------------------------------";
+  String l2 = "GOODBYE!";
+  String l3 = "------------------------------------";
+  
+  int yC = (tft.height() - 30) / 2; 
+  
+  tft.setCursor((tft.width() - (l1.length() * 6)) / 2, yC); tft.print(l1);
+  tft.setCursor((tft.width() - (l2.length() * 6)) / 2, yC + 10); tft.print(l2);
+  tft.setCursor((tft.width() - (l3.length() * 6)) / 2, yC + 20); tft.print(l3); 
+  
+  delay(1500); 
+  
+  tft.fillScreen(ST77XX_BLACK);  
+  digitalWrite(PINO_TELA, HIGH); 
+  
+  while(digitalRead(PINO_BOTAO) == LOW) delay(10);
+  
+  rtc_gpio_pullup_en(GPIO_NUM_13);
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_13, 0);
+  esp_deep_sleep_start();
+}
+
+void exibirBootlogoComando() {
+  tft.fillScreen(ST77XX_BLACK); 
+  tft.setTextColor(ST77XX_WHITE);
+  
+  String logoTexto = "S.I.A.T";
+  String logoSimbolo = "(c)"; 
+  
+  int larguraCharSize3 = 18; 
+  int alturaCharSize3 = 24;  
+  int alturaCharSize1 = 8;
+  int larguraCharSize1 = 6;
+  
+  int wTexto = logoTexto.length() * larguraCharSize3;
+  int logoX = (tft.width() - wTexto) / 2;
+  int logoY = (tft.height() - alturaCharSize3) / 2 - 15; 
+  
+  tft.setTextSize(3);
+  tft.setCursor(logoX, logoY);
+  tft.print(logoTexto);
+
+  tft.setTextSize(1);
+  int simboloY = logoY + (alturaCharSize3 - alturaCharSize1);
+  tft.setCursor(logoX + wTexto + 2, simboloY); 
+  tft.print(logoSimbolo);
+
+  tft.setTextSize(1);
+  String footer1 = "satter's S.I.A.T";
+  String footer2 = "terminal v2.5"; 
+  
+  int f1W = footer1.length() * larguraCharSize1;
+  int f2W = footer2.length() * larguraCharSize1;
+  
+  int f2Y = tft.height() - alturaCharSize1 - 5; 
+  int f1Y = f2Y - 12; 
+  
+  int f1X = (tft.width() - f1W) / 2;
+  int f2X = (tft.width() - f2W) / 2;
+  
+  tft.setCursor(f1X, f1Y);
+  tft.print(footer1);
+  
+  tft.setCursor(f2X, f2Y);
+  tft.print(footer2);
+  
+  while (!Serial.available()) {
+    delay(10);
+  }
+  
+  while (Serial.available()) {
+    Serial.read();
+    delay(2);
+  }
+  
+  if (scrollLinha > 0) {
+    renderizarScroll();
+  } else {
+    restaurarPaginaAtual();
+  }
+}
+
+void animacaoDeBoot() {
+  tft.fillScreen(ST77XX_BLACK); 
+  tft.setTextColor(ST77XX_WHITE);
+  
+  String logoTexto = "S.I.A.T";
+  String logoSimbolo = "(c)"; 
+  
+  int larguraCharSize3 = 18; 
+  int alturaCharSize3 = 24;  
+  int alturaCharSize1 = 8;
+  int larguraCharSize1 = 6;
+  
+  int wTexto = logoTexto.length() * larguraCharSize3;
+  int logoX = (tft.width() - wTexto) / 2;
+  int logoY = (tft.height() - alturaCharSize3) / 2 - 15; 
+  
+  tft.setTextSize(3);
+  tft.setCursor(logoX, logoY);
+  tft.print(logoTexto);
+
+  tft.setTextSize(1);
+  int simboloY = logoY + (alturaCharSize3 - alturaCharSize1);
+  tft.setCursor(logoX + wTexto + 2, simboloY); 
+  tft.print(logoSimbolo);
+
+  tft.setTextSize(1);
+  String footer1 = "satter's S.I.A.T";
+  String footer2 = "terminal v2.5"; 
+  
+  int f1W = footer1.length() * larguraCharSize1;
+  int f2W = footer2.length() * larguraCharSize1;
+  
+  int f2Y = tft.height() - alturaCharSize1 - 5; 
+  int f1Y = f2Y - 12; 
+  
+  int f1X = (tft.width() - f1W) / 2;
+  int f2X = (tft.width() - f2W) / 2;
+  
+  tft.setCursor(f1X, f1Y);
+  tft.print(footer1);
+  
+  tft.setCursor(f2X, f2Y);
+  tft.print(footer2);
+  
+  delay(2500);
+  
+  tft.fillScreen(ST77XX_BLACK);
+  desenharCabecalho();
+  
+  cursorX = margemEsquerda; 
+  cursorY = inicioTextoY + 12; 
+  limparCache();
+
+  tft.setTextColor(COR_CINZA);
+  tft.setTextSize(1);
+  
+  tft.setCursor(margemEsquerda, cursorY);
+  tft.print("Linguagem: PT-BR");
+  cursorY += 12;
+  
+  tft.setCursor(margemEsquerda, cursorY);
+  tft.print("Feito por: satter");
+  cursorY += 12;
+  
+  tft.setCursor(margemEsquerda, cursorY);
+  tft.print("Sistema Iniciado.");
+  
+  cursorX = margemEsquerda; 
+  cursorY = inicioTextoY;
+  escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
+}
+
+void escreverEfeitoDigitacao(const String& texto, int tamanhoFonte, uint16_t cor) {
+  tft.setTextSize(tamanhoFonte); 
+  tft.setTextColor(cor);
+  
+  int larguraLetra = 6 * tamanhoFonte;
+  int limiteTextoX = (tft.width() * 0.6) - 4; 
+
+  for (size_t i = 0; i < texto.length(); i++) {
+    if (Serial.available()) return;
+
+    char letra = texto[i];
+    if (letra < 0 || letra > 127) continue; 
+    
+    if (letra != ' ' && (i == 0 || texto[i - 1] == ' ')) {
+      int caracteresPalavra = 0;
+      for (size_t j = i; j < texto.length() && texto[j] != ' '; j++) {
+        if (texto[j] >= 0 && texto[j] <= 127) caracteresPalavra++;
+      }
+      int larguraPalavra = caracteresPalavra * larguraLetra;
+      
+      if (cursorX > margemEsquerda && (cursorX + larguraPalavra > limiteTextoX)) {
+        int espacoRestanteX = limiteTextoX - cursorX;
+        int caracteresQueCabem = espacoRestanteX / larguraLetra;
+        int caracteresSaindo = caracteresPalavra - caracteresQueCabem;
+
+        if (caracteresQueCabem <= 0 || caracteresSaindo < 4) {
+          avancarLinha(cor, tamanhoFonte);
+        }
+      }
+    }
+
+    if (cursorX == margemEsquerda && letra == ' ') continue;
+    
+    if (cursorX + larguraLetra > limiteTextoX) {
+      if (letra == ' ') {
+        avancarLinha(cor, tamanhoFonte);
+        continue; 
+      } 
+      else {
+        tft.setCursor(cursorX, cursorY);
+        tft.print('-'); 
+        adicionarAoCache('-', cor); 
+        
+        avancarLinha(cor, tamanhoFonte);
+        
+        tft.setCursor(cursorX, cursorY);
+        tft.print('-'); 
+        adicionarAoCache('-', cor); 
+        cursorX += larguraLetra;
+      }
+    }
+
+    tft.setCursor(cursorX, cursorY); 
+    tft.print(letra); 
+    adicionarAoCache(letra, cor);
+    cursorX += larguraLetra;
+    
+    int tempoEspera = (letra == '.') ? 100 : ((letra != ' ') ? 10 : 0);
+    if (tempoEspera > 0) {
+      unsigned long startWait = millis();
+      while (millis() - startWait < (unsigned long)tempoEspera) {
+        if (Serial.available()) return;
+        delay(1);
+      }
+    }
+  }
+}
+
+// ==========================================
+// --- FUNÇÕES MODULARIZADAS DO LOOP ---
+// ==========================================
+
+void verificarBotaoFisico() {
+  bool leitura = digitalRead(PINO_BOTAO);
+  if (leitura == LOW && estadoAnteriorBotao == HIGH && millis() - ultimoDebounce > 250) {
+    ultimoDebounce = millis();
+    if (!popupAberto) {
+      popupAberto = true; 
+      tempoAberturaPopup = millis(); 
+      segundosRestantes = 3;
+      desenharPopup(segundosRestantes);
+    } else {
+      desligarSistema(); 
+    }
+  }
+  estadoAnteriorBotao = leitura;
+
+  if (popupAberto) {
+    int t = (millis() - tempoAberturaPopup) / 1000;
+    if (3 - t != segundosRestantes) {
+      segundosRestantes = 3 - t;
+      if (segundosRestantes >= 0) desenharPopup(segundosRestantes);
+      else fecharPopup();
+    }
+  }
+}
+
+void processarEntradaSnake() {
+  if (Serial.available()) {
+    String inputSnake = Serial.readString();
+    inputSnake.trim();
+    inputSnake.toLowerCase(); 
+
+    if (inputSnake == "exit") {
+      sairSnake();
+      return; 
+    } 
+    else if (inputSnake == "w" && lastSnakeDir != 2) snakeDir = 0;
+    else if (inputSnake == "s" && lastSnakeDir != 0) snakeDir = 2;
+    else if (inputSnake == "a" && lastSnakeDir != 1) snakeDir = 3;
+    else if (inputSnake == "d" && lastSnakeDir != 3) snakeDir = 1;
+  }
+  
+  if (!popupAberto) {
+    atualizarJogoSnake();
+  }
+}
+
+void processarEntradaTerminal() {
+  if (!Serial.available()) return;
+  
+  String textoLido = Serial.readString(); 
+  textoLido.trim(); 
+  
+  if (textoLido.length() == 0) return;
+
+  if (telaInicialCreditos) {
+    telaInicialCreditos = false;
+    tft.fillScreen(ST77XX_BLACK);
+    desenharCabecalho();
+    cursorX = margemEsquerda;
+    cursorY = inicioTextoY;
+    limparCache();
+    escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
+  }
+
+  if (scrollLinha == 0) {
+    tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_BLACK);
+  }
+  
+  textoLido = limparAcentos(textoLido);
+  String textoUpper = textoLido;
+  textoUpper.toUpperCase();
+
+  // ==========================================
+  // COMANDOS DE NAVEGAÇÃO DO EXPLORADOR
+  // ==========================================
+  if (textoUpper == "W") {
+    if (opcaoSelecionada > 0) opcaoSelecionada--;
+    else opcaoSelecionada = menuAtual.size() - 1;
+    marqueeOffset = 0; 
+    desenharMenu();
+    return; 
+  }
+  
+  if (textoUpper == "S") {
+    if (opcaoSelecionada < (int)menuAtual.size() - 1) opcaoSelecionada++;
+    else opcaoSelecionada = 0; 
+    marqueeOffset = 0; 
+    desenharMenu();
+    return;
+  }
+  
+  if (textoUpper == "E") {
+    if (menuAtual.empty()) return;
+    MenuItem& item = menuAtual[opcaoSelecionada];
+    
+    if (item.actionId == 1) { 
+      iniciarSnake();
+    } 
+    else if (item.actionId == 2) {
+      Serial.println("App/Jogo Selecionado: AudioPlayer");
+    } 
+    else if (item.actionId == 3 && item.node != nullptr) {
+      if (item.node->isDir) {
+        item.node->expanded = !item.node->expanded;
+        
+        // --- NOVA INTEGRAÇÃO: O ESP32 SÓ PEDE OS DADOS QUANDO A PASTA É ABERTA ---
+        if (item.node->expanded) {
+            
+            if (item.node->name == "SD PICO") {
+                item.node->children.clear(); // Limpa os dados antigos para evitar duplicação na tela
+                
+                Serial.println("Explorador de arquivos: Solicitando dados ao PICO...");
+                
+                Serial2.println("DADOS_SD"); // Envia o gatilho pro Pico
+                
+                String dadosSD = ""; 
+                unsigned long timeout = millis();
+                bool recebendo = false;
+                
+                // Aguarda e puxa a lista completa em texto do Pico
+                while (millis() - timeout < 4000) {
+                    if (Serial2.available()) {
+                        String linha = Serial2.readStringUntil('\n');
+                        linha.trim();
+                        if (linha == "INICIO_SD") {
+                            recebendo = true;
+                            Serial.println("\n--- ESTRUTURA DO CARTAO MICROSD ---");
+                        } else if (linha == "FIM_SD") {
+                            Serial.println("-----------------------------------");
+                            break; // Sai do while pois já terminou
+                        } else if (recebendo && linha.length() > 0) {
+                            dadosSD += linha + "\n"; // Salva pra interface GUI
+                            
+                            // Interpretador serial: formata visualmente os dados no log do ESP32
+                            if (linha.startsWith("D|") || linha.startsWith("F|")) {
+                                int pos1 = linha.indexOf('|');
+                                int pos2 = linha.indexOf('|', pos1 + 1);
+                                int pos3 = linha.indexOf('|', pos2 + 1);
+                                
+                                String tipo = linha.substring(0, pos1);
+                                int nivel = linha.substring(pos1 + 1, pos2).toInt();
+                                String nome = linha.substring(pos2 + 1, (pos3 == -1) ? linha.length() : pos3);
+                                String tamanho = (pos3 != -1) ? linha.substring(pos3 + 1) : "";
+                                
+                                for(int i=0; i < nivel; i++) Serial.print("  "); // Tabulação
+                                if(tipo == "D") {
+                                    Serial.print("[PASTA]   /"); Serial.println(nome);
+                                } else {
+                                    Serial.print("[ARQUIVO] "); Serial.print(nome);
+                                    Serial.print(" \t("); Serial.print(tamanho); Serial.println(" bytes)");
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Pega os dados recebidos e reconstrói a árvore de nós no TFT do ESP32
+                FileNode* ponteirosNivel[10]; // Limite de 10 sub-níveis de pasta suportados
+                ponteirosNivel[0] = item.node; 
+                
+                int pos = 0;
+                while (pos < (int)dadosSD.length()) {
+                  int nextPos = dadosSD.indexOf('\n', pos);
+                  if (nextPos == -1) break;
+                  String linha = dadosSD.substring(pos, nextPos);
+                  linha.trim();
+                  
+                  if (linha.startsWith("D|") || linha.startsWith("F|")) {
+                      int p1 = linha.indexOf('|');
+                      int p2 = linha.indexOf('|', p1 + 1);
+                      int p3 = linha.indexOf('|', p2 + 1);
+                      
+                      String tipo = linha.substring(0, p1);
+                      int nivel = linha.substring(p1 + 1, p2).toInt();
+                      String nome = linha.substring(p2 + 1, (p3 == -1) ? linha.length() : p3);
+                      
+                      // Cria o Nó e atracha na respectiva pasta parente
+                      FileNode no;
+                      no.name = nome;
+                      no.path = ponteirosNivel[nivel]->path + "/" + nome;
+                      no.isDir = (tipo == "D");
+                      no.expanded = false;
+                      
+                      ponteirosNivel[nivel]->children.push_back(no);
+                      
+                      // Se for pasta, ele se torna o "parente" para o próximo nível (nivel + 1)
+                      if (tipo == "D" && nivel + 1 < 10) {
+                          ponteirosNivel[nivel + 1] = &(ponteirosNivel[nivel]->children.back());
+                      }
+                  }
+                  pos = nextPos + 1;
+                }
+            }
+        }
+        atualizarListaMenu();
+        desenharMenu();
+      }
+    }
+    return;
+  }
+
+  // ==========================================
+  // MODO CALCULADORA CIENTÍFICA (MATHPARSER)
+  // ==========================================
+  if (textoUpper == "CALC" && !modoCalc) {
+    modoCalc = true; 
+    if (cursorX > margemEsquerda) avancarLinha();
+    escreverEfeitoDigitacao("CALCULADORA ATIVADA. Digite EXIT para sair.", 1, ST77XX_GREEN);
+    avancarLinha();
+    escreverEfeitoDigitacao("calc> ", 1, ST77XX_CYAN);
+    esperandoTexto = true;
+    return; 
+  }
+
+  if (modoCalc) {
+    if (textoUpper == "EXIT") {
+      modoCalc = false;
+      if (cursorX > margemEsquerda) avancarLinha();
+      escreverEfeitoDigitacao("CALCULADORA DESATIVADA.", 1, ST77XX_GREEN);
+      if (modoComando) {
+        if (cursorX > margemEsquerda) avancarLinha();
+        escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
+      }
+      esperandoTexto = true;
+      return;
+    }
+
+    if (textoUpper == "UP") {
+      int maxScroll = idxLinhaCache;
+      if (scrollLinha < maxScroll) {
+        scrollLinha += 3;
+        if (scrollLinha > maxScroll) scrollLinha = maxScroll;
+        renderizarScroll();
+      }
+      return;
+    }
+
+    if (textoUpper == "DOWN") {
+      if (scrollLinha > 0) {
+        scrollLinha -= 3;
+        if (scrollLinha <= 0) {
+          scrollLinha = 0;
+          restaurarPaginaAtual();
+        } else {
+          renderizarScroll();
+        }
+      }
+      return;
+    }
+
+    if (scrollLinha > 0 && textoUpper != "UP" && textoUpper != "DOWN") { 
+      scrollLinha = 0; 
+      restaurarPaginaAtual(); 
+    }
+
+    escreverEfeitoDigitacao(textoLido, 1, ST77XX_WHITE);
+    avancarLinha();
+
+    if (parser.compile(textoLido.c_str())) {
+      double resultadoCalc = parser.eval();
+      String resFinal = String(resultadoCalc, 4); 
+      escreverEfeitoDigitacao("= " + resFinal, 1, ST77XX_GREEN);
+    } else {
+      escreverEfeitoDigitacao("Erro: Expressao invalida.", 1, ST77XX_RED);
+    }
+
+    avancarLinha();
+    escreverEfeitoDigitacao("calc> ", 1, ST77XX_CYAN);
+    esperandoTexto = true;
+    return; 
+  }
+  
+  // ==========================================
+  // LÓGICA DO MODO COMANDO
+  // ==========================================
+  if (scrollLinha > 0 && textoUpper != "UP" && textoUpper != "DOWN") {
+    scrollLinha = 0; restaurarPaginaAtual();
+  }
+
+  escreverEfeitoDigitacao(textoLido, 1, ST77XX_GREEN);
+  avancarLinha();
+
+  // ==========================================
+  // ÁREA DE COMANDOS DE SISTEMA
+  // ==========================================
+  if (textoUpper == "CLEAR") {
+    tft.fillScreen(ST77XX_BLACK); 
+    desenharCabecalho(); 
+    cursorX = margemEsquerda; 
+    cursorY = inicioTextoY;
+    limparCache();
+  } 
+  else if (textoUpper == "UP") {
+    int maxScroll = idxLinhaCache;
+    if (scrollLinha < maxScroll) {
+      scrollLinha += 3;
+      if (scrollLinha > maxScroll) scrollLinha = maxScroll;
+      renderizarScroll();
+    }
+  }
+  else if (textoUpper == "DOWN") {
+    if (scrollLinha > 0) {
+      scrollLinha -= 3;
+      if (scrollLinha <= 0) {
+        scrollLinha = 0;
+        restaurarPaginaAtual();
+      } else {
+        renderizarScroll();
+      }
+    }
+  }
+  else if (textoUpper == "BOOTLOGO") {
+    exibirBootlogoComando();
+  }
+  else if (textoUpper == "HELP") {
+    String mensagensAjuda[] = {
+      "COMANDOS DISPONIVEIS:", 
+      "BOOTLOGO (Exibe a logo)",
+      "CALC (Calculadora)",
+      "CLEAR (Limpa a tela)",
+      "HELP (Lista comandos)",
+      "REBOOT (Reinicia sistema)",
+      "SHUTDOWN (Desliga OS)",
+      "UP / DOWN (Historico)"
+    };
+    int numMensagens = 8; 
+    bool interrompido = false;
+
+    for (int i = 0; i < numMensagens; i += 2) {
+      tft.fillScreen(ST77XX_BLACK); 
+      desenharCabecalho(); 
+      cursorX = margemEsquerda; 
+      cursorY = inicioTextoY;
+      novaLinhaCache(); 
+      indiceLinhaInicioPagina = idxLinhaCache; 
+      
+      for (int j = 0; j < 2; j++) {
+        if (i + j < numMensagens) {
+          if (Serial.available()) { interrompido = true; break; }
+          escreverEfeitoDigitacao(mensagensAjuda[i + j], 1, ST77XX_GREEN);
+          avancarLinha();
+        }
+      }
+      if (interrompido) break;
+      
+      for (int p = 0; p < 3; p++) {
+        unsigned long startWait = millis();
+        while (millis() - startWait < 666) { if (Serial.available()) { interrompido = true; break; } delay(10); }
+        if (interrompido) break;
+        escreverEfeitoDigitacao(".", 1, ST77XX_GREEN);
+        if (Serial.available()) { interrompido = true; break; }
+      }
+      if (interrompido) break;
+    }
+    
+    if (!interrompido) {
+      tft.fillScreen(ST77XX_BLACK); 
+      desenharCabecalho(); 
+      cursorX = margemEsquerda; 
+      cursorY = inicioTextoY;
+      novaLinhaCache(); 
+      indiceLinhaInicioPagina = idxLinhaCache;
+    }
+  }
+  else if (textoUpper == "SHUTDOWN") {
+    desligarSistema();
+  }
+  else if (textoUpper == "REBOOT") {
+    tft.fillScreen(ST77XX_BLACK);
+    ESP.restart();
+  }
+  else {
+    escreverEfeitoDigitacao("Erro: Comando nao reconhecido.", 1, ST77XX_GREEN);
+  }
+
+  if (modoComando && textoUpper != "UP" && textoUpper != "DOWN") {
+    if (cursorX > margemEsquerda) {
+       avancarLinha();
+    }
+    escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  
+  // --- INICIALIZAÇÃO DA UART ESP32 ---
+  Serial2.begin(115200, SERIAL_8N1, 16, 17);
+  Serial2.setTimeout(20);
+  
+  pinMode(PINO_BOTAO, INPUT_PULLUP);
+  pinMode(PINO_TELA, OUTPUT);
+  digitalWrite(PINO_TELA, LOW); 
+
+  tft.init(240, 280);
+  tft.setRotation(3);
+  tft.fillScreen(ST77XX_BLACK);
+
+  animacaoDeBoot();
+
+  sistemaArquivos.name = "SD PICO";
+  sistemaArquivos.path = "/";
+  sistemaArquivos.isDir = true;
+  sistemaArquivos.expanded = false;
+  
+  atualizarListaMenu();
+  desenharCabecalho();
+}
+
+void loop() {
+  verificarBotaoFisico();
+  if (modoSnake) {
+    processarEntradaSnake();
+  } else {
+    processarEntradaTerminal();
+    atualizarMarquee();
+    
+    if (!popupAberto) {
+      if (millis() - tempoUltimoBlink > (unsigned long)intervaloBlink) {
+        tempoUltimoBlink = millis();
+        cursorVisivel = !cursorVisivel;
+        if (cursorVisivel) {
+          tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_WHITE);
+        } else {
+          tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_BLACK);
+        }
+      }
+    }
+  }
+
+  // Apenas printa no Monitor Serial caso receba mensagens genéricas via UART fora do "DADOS_SD"
+  if (Serial2.available()) {
+    String recebido = Serial2.readStringUntil('\n');
+    recebido.trim();
+    if (recebido.length() > 0) {
+      Serial.println("PICO MANDOU: " + recebido);
+    }
+  }
+}
