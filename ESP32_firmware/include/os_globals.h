@@ -41,6 +41,9 @@ extern int idxLinhaCache;
 extern int indiceLinhaInicioPagina;
 extern int scrollLinha;
 
+// Nova trava de segurança para sincronizar os dois processadores
+extern volatile bool uartOcupada;
+
 // GUI
 void desenharMenu();
 void atualizarMarquee();
