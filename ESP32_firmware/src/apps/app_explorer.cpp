@@ -1,10 +1,40 @@
 #include "../../include/apps/app_explorer.h"
 #include "../../include/apps/app_snake.h"
 
-// Função auxiliar para traduzir bytes para KB, MB e GB
+// Tradutor de caracteres para evitar erros no Monitor Serial e no Adafruit_GFX
+String limparCaracteresEspeciais(String texto) {
+  String t = texto;
+  
+  // 1. Tenta traduzir os acentos UTF-8 mais comuns para versões sem acento
+  t.replace("á", "a"); t.replace("à", "a"); t.replace("â", "a"); t.replace("ã", "a");
+  t.replace("é", "e"); t.replace("è", "e"); t.replace("ê", "e");
+  t.replace("í", "i"); t.replace("ì", "i"); t.replace("î", "i");
+  t.replace("ó", "o"); t.replace("ò", "o"); t.replace("ô", "o"); t.replace("õ", "o");
+  t.replace("ú", "u"); t.replace("ù", "u"); t.replace("û", "u");
+  t.replace("ç", "c");
+  t.replace("Á", "A"); t.replace("À", "A"); t.replace("Â", "A"); t.replace("Ã", "A");
+  t.replace("É", "E"); t.replace("È", "E"); t.replace("Ê", "E");
+  t.replace("Í", "I"); t.replace("Ì", "I"); t.replace("Î", "I");
+  t.replace("Ó", "O"); t.replace("Ò", "O"); t.replace("Ô", "O"); t.replace("Õ", "O");
+  t.replace("Ú", "U"); t.replace("Ù", "U"); t.replace("Û", "U");
+  t.replace("Ç", "C");
+  
+  // 2. Filtro de Segurança: Remove lixo invisível e caracteres não suportados pela tela
+  String limpo = "";
+  for (int i = 0; i < t.length(); i++) {
+    unsigned char c = t[i];
+    if (c >= 32 && c <= 126) { // Apenas caracteres ASCII imprimíveis normais
+      limpo += (char)c;
+    } else if (c > 127) {
+      limpo += '_'; // Substitui bytes soltos/quebrados por underline
+    }
+  }
+  return limpo;
+}
+
 String formatarTamanhoBytes(String tamanhoStr) {
   if (tamanhoStr.length() == 0) return "";
-  double bytes = tamanhoStr.toDouble(); // Usa double para evitar estouro de limite de 2GB
+  double bytes = tamanhoStr.toDouble(); 
   
   if (bytes < 1024) return String((int)bytes) + " bytes";
   else if (bytes < 1048576) return String(bytes / 1024.0, 2) + " KB";
@@ -42,7 +72,7 @@ void acaoExplorador(MenuItem& item) {
                       if (linha == "INICIO_SD") {
                           recebendo = true;
                           Serial.println("\n--- CONTEUDO DO CARTAO MICROSD ---");
-                          Serial.println("/SD_PICO"); // Imprime o "Disco" raiz
+                          Serial.println("/SD_PICO"); 
                       } else if (linha == "FIM_SD") {
                           Serial.println("----------------------------------");
                           break; 
@@ -56,17 +86,17 @@ void acaoExplorador(MenuItem& item) {
                               
                               String tipo = linha.substring(0, pos1);
                               int nivel = linha.substring(pos1 + 1, pos2).toInt();
-                              String nome = linha.substring(pos2 + 1, (pos3 == -1) ? linha.length() : pos3);
+                              String nomeBruto = linha.substring(pos2 + 1, (pos3 == -1) ? linha.length() : pos3);
+                              String nomeLimpo = limparCaracteresEspeciais(nomeBruto);
                               String tamanhoStr = (pos3 != -1) ? linha.substring(pos3 + 1) : "";
                               
-                              // Adiciona um espaço extra de indentação (+1) para simular que estão DENTRO do /SD_PICO
                               for(int i = 0; i <= nivel; i++) Serial.print("  "); 
                               
                               if(tipo == "D") {
-                                  Serial.print("[PASTA]   /"); Serial.println(nome);
+                                  Serial.print("/"); Serial.println(nomeLimpo);
                               } else {
                                   String tamanhoFormatado = formatarTamanhoBytes(tamanhoStr);
-                                  Serial.print("[ARQUIVO] "); Serial.print(nome);
+                                  Serial.print(nomeLimpo);
                                   Serial.print(" \t("); Serial.print(tamanhoFormatado); Serial.println(")");
                               }
                           }
@@ -91,11 +121,12 @@ void acaoExplorador(MenuItem& item) {
                     
                     String tipo = linha.substring(0, p1);
                     int nivel = linha.substring(p1 + 1, p2).toInt();
-                    String nome = linha.substring(p2 + 1, (p3 == -1) ? linha.length() : p3);
+                    String nomeBruto = linha.substring(p2 + 1, (p3 == -1) ? linha.length() : p3);
+                    String nomeLimpo = limparCaracteresEspeciais(nomeBruto);
                     
                     FileNode no;
-                    no.name = nome;
-                    no.path = ponteirosNivel[nivel]->path + "/" + nome;
+                    no.name = nomeLimpo;
+                    no.path = ponteirosNivel[nivel]->path + "/" + nomeLimpo;
                     no.isDir = (tipo == "D");
                     no.expanded = false;
                     
