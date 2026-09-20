@@ -62,8 +62,8 @@ void setup() {
   pinMode(PINO_TELA, OUTPUT);
   digitalWrite(PINO_TELA, LOW);
   
-  tft.init(240, 280);
-  tft.setRotation(3);
+  tft.init(170, 320); // Inicialização atualizada para a resolução do display IPS 1.9"
+  tft.setRotation(3); 
   tft.fillScreen(ST77XX_BLACK);
   animacaoDeBoot();
   
