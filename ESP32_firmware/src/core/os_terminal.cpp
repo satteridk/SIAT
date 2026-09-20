@@ -137,7 +137,7 @@ String limparAcentos(const String& textoOriginal) {
 
 void processarEntradaTerminal() {
   if (!Serial.available()) return;
-  String textoLido = Serial.readString(); 
+  String textoLido = Serial.readStringUntil('\n');
   textoLido.trim(); 
   if (textoLido.length() == 0) return;
 

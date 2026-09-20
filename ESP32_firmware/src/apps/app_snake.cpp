@@ -185,7 +185,7 @@ void sairSnake() {
 
 void processarEntradaSnake() {
   if (Serial.available()) {
-    String inputSnake = Serial.readString();
+    String inputSnake = Serial.readStringUntil('\n');
     inputSnake.trim();
     inputSnake.toLowerCase(); 
     

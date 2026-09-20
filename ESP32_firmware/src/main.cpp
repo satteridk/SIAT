@@ -14,7 +14,6 @@ bool esperandoTexto = true;
 String tituloAtual = "TERMINAL V2.6";
 bool telaInicialCreditos = true;
 
-// Inicialização da Máquina de Estados
 EstadoSistema estadoAtual = TERMINAL_CMD;
 EstadoSistema estadoAnterior = TERMINAL_CMD;
 
@@ -53,6 +52,8 @@ void TarefaBackground(void *pvParameters) {
 
 void setup() {
   Serial.begin(115200);
+  Serial.setTimeout(10); // <-- CORREÇÃO: Força o ESP32 a não esperar 1 segundo por novos caracteres
+  
   Serial2.begin(921600, SERIAL_8N1, 16, 17); 
   Serial2.setTimeout(20);
 
@@ -60,7 +61,7 @@ void setup() {
 
   pinMode(PINO_BOTAO, INPUT_PULLUP);
   pinMode(PINO_TELA, OUTPUT);
-  digitalWrite(PINO_TELA, HIGH); // <-- ALTERADO AQUI: HIGH para acender o backlight do módulo novo
+  digitalWrite(PINO_TELA, HIGH); 
   
   tft.init(170, 320);
   tft.setRotation(3);
