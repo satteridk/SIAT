@@ -60,10 +60,10 @@ void setup() {
 
   pinMode(PINO_BOTAO, INPUT_PULLUP);
   pinMode(PINO_TELA, OUTPUT);
-  digitalWrite(PINO_TELA, LOW);
+  digitalWrite(PINO_TELA, HIGH); // <-- ALTERADO AQUI: HIGH para acender o backlight do módulo novo
   
-  tft.init(170, 320); // Inicialização atualizada para a resolução do display IPS 1.9"
-  tft.setRotation(3); 
+  tft.init(170, 320);
+  tft.setRotation(3);
   tft.fillScreen(ST77XX_BLACK);
   animacaoDeBoot();
   
@@ -79,7 +79,6 @@ void setup() {
 void loop() {
   verificarBotaoFisico();
   
-  // Roteador de Tráfego Central (FSM)
   switch(estadoAtual) {
     case TERMINAL_CMD:
       processarEntradaTerminal();
@@ -91,11 +90,9 @@ void loop() {
       processarEntradaSnake();
       break;
     case POPUP_DESLIGAR:
-      // A interface e os apps congelam automaticamente, o relógio do popup roda isolado na interrupção de hardware.
       break;
   }
   
-  // Efeitos visuais correm independentemente contanto que o sistema não esteja num App Fullscreen ou Popup
   if (estadoAtual == TERMINAL_CMD || estadoAtual == APP_CALCULADORA) {
     atualizarMarquee();
     if (millis() - tempoUltimoBlink > (unsigned long)intervaloBlink) {
