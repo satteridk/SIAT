@@ -1,30 +1,38 @@
 #include "../../include/os_globals.h"
 #include "../../include/apps/app_explorer.h"
 
-void iniciarTerminal() {
-  estadoAtual = APP_TERMINAL;
-  tft.fillScreen(ST77XX_BLACK);
-  desenharCabecalho(true);
-  desenharMenu(true);
-  limparCache();
-  cursorX = (tft.width() / 2) + 6;
-  cursorY = 32;
-  escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
+// --- Estado proprio do console ---
+int cursorX = margemEsquerda;
+int cursorY = inicioTextoY;
+unsigned long tempoUltimoBlink = 0;
+bool cursorVisivel = false;
+bool esperandoTexto = true;
+bool telaInicialCreditos = true;
+
+String cacheLinhas[MAX_LINHAS_CACHE];
+uint16_t cacheCores[MAX_LINHAS_CACHE][MAX_CHARS_LINHA];
+int idxLinhaCache = 0;
+int indiceLinhaInicioPagina = 0;
+int scrollLinha = 0;
+
+// ==========================================
+// ENTRADA SERIAL NAO BLOQUEANTE
+// readStringUntil('\n') + timeout de 10ms = zero lag.
+// ==========================================
+bool lerLinhaSerial(String& destino) {
+  if (!Serial.available()) return false;
+  destino = Serial.readStringUntil('\n');
+  destino.trim();
+  return destino.length() > 0;
 }
 
-void sairTerminal() {
-  estadoAtual = MENU_PRINCIPAL;
-  tft.fillScreen(ST77XX_BLACK);
-  desenharCabecalho(false);
-  desenharMenu(false);
-}
-
+// ==========================================
+// CACHE 2D
+// ==========================================
 void limparCache() {
   for (int i = 0; i < MAX_LINHAS_CACHE; i++) {
     cacheLinhas[i] = "";
-    for (int j = 0; j < MAX_CHARS_LINHA; j++) {
-      cacheCores[i][j] = ST77XX_WHITE;
-    }
+    for (int j = 0; j < MAX_CHARS_LINHA; j++) cacheCores[i][j] = ST77XX_WHITE;
   }
   idxLinhaCache = 0;
   indiceLinhaInicioPagina = 0;
@@ -37,14 +45,10 @@ void novaLinhaCache() {
   } else {
     for (int i = 0; i < MAX_LINHAS_CACHE - 1; i++) {
       cacheLinhas[i] = cacheLinhas[i + 1];
-      for (int j = 0; j < MAX_CHARS_LINHA; j++) {
-        cacheCores[i][j] = cacheCores[i + 1][j];
-      }
+      for (int j = 0; j < MAX_CHARS_LINHA; j++) cacheCores[i][j] = cacheCores[i + 1][j];
     }
     cacheLinhas[MAX_LINHAS_CACHE - 1] = "";
-    for (int j = 0; j < MAX_CHARS_LINHA; j++) {
-      cacheCores[MAX_LINHAS_CACHE - 1][j] = ST77XX_WHITE;
-    }
+    for (int j = 0; j < MAX_CHARS_LINHA; j++) cacheCores[MAX_LINHAS_CACHE - 1][j] = ST77XX_WHITE;
   }
 }
 
@@ -57,91 +61,159 @@ void adicionarAoCache(char c, uint16_t cor) {
 }
 
 void desenharLinhaCache(int indice, int y) {
-  int startX = (estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA) ? (tft.width() / 2) + 6 : margemEsquerda;
-  int x = startX;
+  int x = margemEsquerda;
   tft.setTextSize(1);
   for (size_t i = 0; i < cacheLinhas[indice].length(); i++) {
     tft.setTextColor(cacheCores[indice][i]);
     tft.setCursor(x, y);
     tft.print(cacheLinhas[indice][i]);
-    x += 6;
+    x += LARGURA_CHAR;
   }
 }
 
+// ==========================================
+// RENDERIZACAO
+// ==========================================
 void restaurarPaginaAtual() {
   tft.fillScreen(ST77XX_BLACK);
-  desenharCabecalho(estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA);
-  if (estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA) desenharMenu(true);
-  
-  int areaY = tft.height() - 32 - 4;
-  int maxLinhasVisiveis = areaY / 12;
+  desenharCabecalho();
+
+  int maxLinhasVisiveis = (tft.height() - inicioTextoY - 20) / ALTURA_LINHA;
   int linhaInicioRender = idxLinhaCache - maxLinhasVisiveis + 1;
-  if (linhaInicioRender < indiceLinhaInicioPagina) {
-    linhaInicioRender = indiceLinhaInicioPagina;
-  }
+  if (linhaInicioRender < indiceLinhaInicioPagina) linhaInicioRender = indiceLinhaInicioPagina;
   if (linhaInicioRender < 0) linhaInicioRender = 0;
 
-  int y = 32;
+  int y = inicioTextoY;
   for (int i = linhaInicioRender; i <= idxLinhaCache; i++) {
     desenharLinhaCache(i, y);
-    y += 12;
+    y += ALTURA_LINHA;
   }
-  int startX = (estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA) ? (tft.width() / 2) + 6 : margemEsquerda;
-  cursorX = startX;
+
+  cursorX = margemEsquerda;
   if (cacheLinhas[idxLinhaCache].length() > 0) {
-      cursorX = startX + (cacheLinhas[idxLinhaCache].length() * 6);
+    cursorX = margemEsquerda + (cacheLinhas[idxLinhaCache].length() * LARGURA_CHAR);
   }
-  cursorY = y - 12;
+  cursorY = y - ALTURA_LINHA;
 }
 
 void renderizarScroll() {
   tft.fillScreen(ST77XX_BLACK);
-  desenharCabecalho(estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA);
-  if (estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA) desenharMenu(true);
+  desenharCabecalho();
 
-  int areaY = tft.height() - 32 - 4;
-  int maxLinhasVisiveis = areaY / 12;
-  
+  int maxLinhasVisiveis = (tft.height() - inicioTextoY - 20) / ALTURA_LINHA;
+
   int linhaFimScroll = idxLinhaCache - scrollLinha;
   if (linhaFimScroll < 0) linhaFimScroll = 0;
 
   int linhaInicioScroll = linhaFimScroll - maxLinhasVisiveis + 1;
   if (linhaInicioScroll < 0) linhaInicioScroll = 0;
 
-  int y = 32;
+  int y = inicioTextoY;
   for (int i = linhaInicioScroll; i <= linhaFimScroll; i++) {
     desenharLinhaCache(i, y);
-    y += 12;
+    y += ALTURA_LINHA;
   }
 
-  int barraX = tft.width() - 10;
-  tft.fillRect(barraX, 32, 4, areaY, COR_CINZA);
-  
+  tft.fillRect((tft.width() * 0.6) - 10, inicioTextoY, 4, tft.height() - inicioTextoY - 20, COR_CINZA);
+
   int totalLinhas = idxLinhaCache + 1;
   if (totalLinhas > maxLinhasVisiveis) {
-      float proporcao = (float)maxLinhasVisiveis / totalLinhas;
-      int alturaBarra = proporcao * areaY;
-      if (alturaBarra < 10) alturaBarra = 10; 
-      
-      float progresso = 1.0 - ((float)scrollLinha / (totalLinhas - maxLinhasVisiveis));
-      int maxYBarra = (tft.height() - 10) - alturaBarra;
-      int yBarra = 32 + (progresso * (maxYBarra - 32));
-      
-      tft.fillRect(barraX - 1, yBarra, 6, alturaBarra, ST77XX_WHITE);
+    float proporcao = (float)maxLinhasVisiveis / totalLinhas;
+    int alturaBarra = proporcao * (tft.height() - inicioTextoY - 20);
+    if (alturaBarra < 10) alturaBarra = 10;
+
+    float progresso = 1.0 - ((float)scrollLinha / (totalLinhas - maxLinhasVisiveis));
+    int maxYBarra = (tft.height() - 20) - alturaBarra;
+    int yBarra = inicioTextoY + (progresso * (maxYBarra - inicioTextoY));
+
+    tft.fillRect((tft.width() * 0.6) - 11, yBarra, 6, alturaBarra, ST77XX_WHITE);
   }
 }
 
 void avancarLinha(uint16_t corRestaurar, int tamanhoFonteRestaurar) {
-  cursorY += 12; 
-  int startX = (estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA) ? (tft.width() / 2) + 6 : margemEsquerda;
-  cursorX = startX; 
+  cursorY += (8 * tamanhoFonteRestaurar) + 4;
+  cursorX = margemEsquerda;
   novaLinhaCache();
-  
-  if (cursorY > tft.height() - 12) {
-    restaurarPaginaAtual(); 
-    cursorY = tft.height() - 16; 
+
+  if (cursorY > tft.height() - 20) {
+    restaurarPaginaAtual();
+    cursorY = tft.height() - 24;
   }
-  tft.setTextColor(corRestaurar); 
+  tft.setTextColor(corRestaurar);
+}
+
+// Motor de digitacao (pertence ao terminal, nao a GUI)
+void escreverEfeitoDigitacao(const String& texto, int tamanhoFonte, uint16_t cor) {
+  tft.setTextSize(tamanhoFonte);
+  tft.setTextColor(cor);
+
+  int larguraLetra = LARGURA_CHAR * tamanhoFonte;
+  int limiteTextoX = (tft.width() * 0.6) - 4;
+
+  for (size_t i = 0; i < texto.length(); i++) {
+    if (Serial.available()) return;
+    char letra = texto[i];
+    if (letra < 0 || letra > 127) continue;
+
+    if (letra != ' ' && (i == 0 || texto[i - 1] == ' ')) {
+      int caracteresPalavra = 0;
+      for (size_t j = i; j < texto.length() && texto[j] != ' '; j++) {
+        if (texto[j] >= 0 && texto[j] <= 127) caracteresPalavra++;
+      }
+      int larguraPalavra = caracteresPalavra * larguraLetra;
+
+      if (cursorX > margemEsquerda && (cursorX + larguraPalavra > limiteTextoX)) {
+        int espacoRestanteX = limiteTextoX - cursorX;
+        int caracteresQueCabem = espacoRestanteX / larguraLetra;
+        int caracteresSaindo = caracteresPalavra - caracteresQueCabem;
+        if (caracteresQueCabem <= 0 || caracteresSaindo < 4) {
+          avancarLinha(cor, tamanhoFonte);
+        }
+      }
+    }
+
+    if (cursorX == margemEsquerda && letra == ' ') continue;
+
+    if (cursorX + larguraLetra > limiteTextoX) {
+      if (letra == ' ') {
+        avancarLinha(cor, tamanhoFonte);
+        continue;
+      } else {
+        tft.setCursor(cursorX, cursorY);
+        tft.print('-');
+        adicionarAoCache('-', cor);
+        avancarLinha(cor, tamanhoFonte);
+        tft.setCursor(cursorX, cursorY);
+        tft.print('-');
+        adicionarAoCache('-', cor);
+        cursorX += larguraLetra;
+      }
+    }
+
+    tft.setCursor(cursorX, cursorY);
+    tft.print(letra);
+    adicionarAoCache(letra, cor);
+    cursorX += larguraLetra;
+
+    int tempoEspera = (letra == '.') ? 100 : ((letra != ' ') ? 10 : 0);
+    if (tempoEspera > 0) {
+      unsigned long startWait = millis();
+      while (millis() - startWait < (unsigned long)tempoEspera) {
+        if (Serial.available()) return;
+        delay(1);
+      }
+    }
+  }
+}
+
+// Retorno padronizado ao console (usado por qualquer app fullscreen)
+void restaurarTerminal() {
+  estadoAtual = TERMINAL_CMD;
+  if (scrollLinha > 0) renderizarScroll();
+  else restaurarPaginaAtual();
+
+  if (cursorX > margemEsquerda) avancarLinha();
+  escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
 }
 
 String limparAcentos(const String& textoOriginal) {
@@ -161,51 +233,81 @@ String limparAcentos(const String& textoOriginal) {
   return texto;
 }
 
+// ==========================================
+// PARSER MESTRE DE COMANDOS
+// ==========================================
 void processarEntradaTerminal() {
-  if (!Serial.available()) return;
-  String textoLido = Serial.readStringUntil('\n'); 
-  textoLido.trim(); 
-  if (textoLido.length() == 0) return;
+  String textoLido;
+  if (!lerLinhaSerial(textoLido)) return;
 
-  if (scrollLinha == 0) {
-    tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_BLACK);
+  if (telaInicialCreditos) {
+    telaInicialCreditos = false;
+    tft.fillScreen(ST77XX_BLACK);
+    desenharCabecalho();
+    cursorX = margemEsquerda;
+    cursorY = inicioTextoY;
+    limparCache();
+    escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
   }
+
+  if (scrollLinha == 0) tft.fillRect(cursorX, cursorY, LARGURA_CHAR, 8, ST77XX_BLACK);
 
   textoLido = limparAcentos(textoLido);
   String textoUpper = textoLido;
   textoUpper.toUpperCase();
 
-  if (textoUpper == "EXIT") {
-    sairTerminal();
-    return; 
+  // --- Navegacao do painel lateral ---
+  if (textoUpper == "W") {
+    if (opcaoSelecionada > 0) opcaoSelecionada--;
+    else opcaoSelecionada = menuAtual.size() - 1;
+    marqueeOffset = 0;
+    desenharMenu();
+    return;
+  }
+  if (textoUpper == "S") {
+    if (opcaoSelecionada < (int)menuAtual.size() - 1) opcaoSelecionada++;
+    else opcaoSelecionada = 0;
+    marqueeOffset = 0;
+    desenharMenu();
+    return;
+  }
+  if (textoUpper == "E") {
+    if (menuAtual.empty()) return;
+    executarItemMenu(menuAtual[opcaoSelecionada]);
+    return;
   }
 
+  // --- Transicao de estado: calculadora ---
   if (textoUpper == "CALC" && estadoAtual != APP_CALCULADORA) {
-    estadoAtual = APP_CALCULADORA; 
-    int startX = (tft.width() / 2) + 6;
-    if (cursorX > startX) avancarLinha(ST77XX_GREEN, 1);
-    escreverEfeitoDigitacao("CALC ATIVADA. EXIT para sair.", 1, ST77XX_GREEN);
-    avancarLinha(ST77XX_CYAN, 1);
+    estadoAtual = APP_CALCULADORA;
+    if (cursorX > margemEsquerda) avancarLinha();
+    escreverEfeitoDigitacao("CALCULADORA ATIVADA. Digite EXIT para sair.", 1, ST77XX_GREEN);
+    avancarLinha();
     escreverEfeitoDigitacao("calc> ", 1, ST77XX_CYAN);
     esperandoTexto = true;
-    return; 
+    return;
   }
 
   if (scrollLinha > 0 && textoUpper != "UP" && textoUpper != "DOWN") {
-    scrollLinha = 0; restaurarPaginaAtual();
+    scrollLinha = 0;
+    restaurarPaginaAtual();
   }
 
   escreverEfeitoDigitacao(textoLido, 1, ST77XX_GREEN);
-  avancarLinha(ST77XX_GREEN, 1);
+  avancarLinha();
 
+  // --- Comandos de sistema ---
   if (textoUpper == "CLEAR") {
-    tft.fillScreen(ST77XX_BLACK); 
-    desenharCabecalho(true); 
-    desenharMenu(true);
-    cursorX = (tft.width() / 2) + 6; 
+    tft.fillScreen(ST77XX_BLACK);
+    desenharCabecalho();
+    cursorX = margemEsquerda;
     cursorY = inicioTextoY;
     limparCache();
-  } 
+  }
+  else if (textoUpper == "EXPLORER" || textoUpper == "EXPLORADOR") {
+    iniciarExplorador();
+    return;
+  }
   else if (textoUpper == "UP") {
     int maxScroll = idxLinhaCache;
     if (scrollLinha < maxScroll) {
@@ -217,44 +319,45 @@ void processarEntradaTerminal() {
   else if (textoUpper == "DOWN") {
     if (scrollLinha > 0) {
       scrollLinha -= 3;
-      if (scrollLinha <= 0) {
-        scrollLinha = 0;
-        restaurarPaginaAtual();
-      } else {
-        renderizarScroll();
-      }
+      if (scrollLinha <= 0) { scrollLinha = 0; restaurarPaginaAtual(); }
+      else renderizarScroll();
     }
+  }
+  else if (textoUpper == "BOOTLOGO") {
+    exibirBootlogoComando();
   }
   else if (textoUpper == "HELP") {
     String mensagensAjuda[] = {
-      "COMANDOS DISPONIVEIS:", 
+      "COMANDOS DISPONIVEIS:",
+      "BOOTLOGO (Exibe a logo)",
       "CALC (Calculadora)",
       "CLEAR (Limpa a tela)",
-      "EXIT (Volta ao Menu)",
+      "EXPLORER (Arquivos do SD)",
       "HELP (Lista comandos)",
-      "REBOOT (Reinicia OS)",
+      "REBOOT (Reinicia sistema)",
       "SHUTDOWN (Desliga OS)",
-      "UP / DOWN (Rolagem)"
+      "UP / DOWN (Historico)"
     };
-    int numMensagens = 8; 
+    int numMensagens = 9;
     bool interrompido = false;
+
     for (int i = 0; i < numMensagens; i += 2) {
-      tft.fillScreen(ST77XX_BLACK); 
-      desenharCabecalho(true);
-      desenharMenu(true); 
-      cursorX = (tft.width() / 2) + 6; 
+      tft.fillScreen(ST77XX_BLACK);
+      desenharCabecalho();
+      cursorX = margemEsquerda;
       cursorY = inicioTextoY;
-      novaLinhaCache(); 
-      indiceLinhaInicioPagina = idxLinhaCache;       
+      novaLinhaCache();
+      indiceLinhaInicioPagina = idxLinhaCache;
+
       for (int j = 0; j < 2; j++) {
         if (i + j < numMensagens) {
           if (Serial.available()) { interrompido = true; break; }
           escreverEfeitoDigitacao(mensagensAjuda[i + j], 1, ST77XX_GREEN);
-          avancarLinha(ST77XX_GREEN, 1);
+          avancarLinha();
         }
       }
       if (interrompido) break;
-      
+
       for (int p = 0; p < 3; p++) {
         unsigned long startWait = millis();
         while (millis() - startWait < 666) { if (Serial.available()) { interrompido = true; break; } delay(10); }
@@ -264,14 +367,13 @@ void processarEntradaTerminal() {
       }
       if (interrompido) break;
     }
-    
+
     if (!interrompido) {
-      tft.fillScreen(ST77XX_BLACK); 
-      desenharCabecalho(true);
-      desenharMenu(true); 
-      cursorX = (tft.width() / 2) + 6; 
+      tft.fillScreen(ST77XX_BLACK);
+      desenharCabecalho();
+      cursorX = margemEsquerda;
       cursorY = inicioTextoY;
-      novaLinhaCache(); 
+      novaLinhaCache();
       indiceLinhaInicioPagina = idxLinhaCache;
     }
   }
@@ -287,10 +389,7 @@ void processarEntradaTerminal() {
   }
 
   if (textoUpper != "UP" && textoUpper != "DOWN") {
-    int startX = (tft.width() / 2) + 6;
-    if (cursorX > startX) {
-       avancarLinha(ST77XX_WHITE, 1);
-    }
+    if (cursorX > margemEsquerda) avancarLinha();
     escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
   }
 }

@@ -3,41 +3,23 @@
 #include "../include/apps/app_calc.h"
 #include "../include/apps/app_explorer.h"
 
+// ==========================================
+// DEFINICAO DOS RECURSOS TRANSVERSAIS
+// ==========================================
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 MathParser parser;
 
-int cursorX = margemEsquerda;
-int cursorY = inicioTextoY;
-unsigned long tempoUltimoBlink = 0;
-bool cursorVisivel = false;
-bool esperandoTexto = true; 
-String tituloAtual = "S.I.A.T OS";
-
-EstadoSistema estadoAtual = MENU_PRINCIPAL;
-EstadoSistema estadoAnterior = MENU_PRINCIPAL;
-
-unsigned long tempoAberturaPopup = 0;
-int segundosRestantes = 3;
-bool estadoAnteriorBotao = HIGH;
-unsigned long ultimoDebounce = 0;
-FileNode sistemaArquivos;
-std::vector<MenuItem> menuAtual;
-int opcaoSelecionada = 0;
-int marqueeOffset = 0;
-unsigned long lastMarqueeUpdate = 0;
-bool forcarRedrawSnake = false; 
-
-String cacheLinhas[MAX_LINHAS_CACHE];
-uint16_t cacheCores[MAX_LINHAS_CACHE][MAX_CHARS_LINHA]; 
-int idxLinhaCache = 0;
-int indiceLinhaInicioPagina = 0;
-int scrollLinha = 0;
+EstadoSistema estadoAtual    = TERMINAL_CMD;
+EstadoSistema estadoAnterior = TERMINAL_CMD;
 
 volatile bool uartOcupada = false;
+bool forcarRedrawSnake = false;
+
 TaskHandle_t TaskCore0;
 
+// Task assincrona travada no Core 0: drena a UART2 quando nenhum app a reivindica
 void TarefaBackground(void *pvParameters) {
-  for(;;) {
+  for (;;) {
     if (!uartOcupada && Serial2.available()) {
       String recebido = Serial2.readStringUntil('\n');
       recebido.trim();
@@ -51,40 +33,36 @@ void TarefaBackground(void *pvParameters) {
 
 void setup() {
   Serial.begin(115200);
-  Serial.setTimeout(10); 
-  
-  Serial2.begin(921600, SERIAL_8N1, 16, 17); 
-  Serial2.setTimeout(20);
+  Serial.setTimeout(SERIAL_TIMEOUT_MS);          // Zero lag: 10ms em vez dos 1000ms default
+
+  Serial2.begin(UART_PICO_BAUD, SERIAL_8N1, UART_PICO_RX, UART_PICO_TX);
+  Serial2.setTimeout(UART_TIMEOUT_MS);
 
   xTaskCreatePinnedToCore(TarefaBackground, "TaskCore0", 4096, NULL, 1, &TaskCore0, 0);
 
   pinMode(PINO_BOTAO, INPUT_PULLUP);
   pinMode(PINO_TELA, OUTPUT);
-  digitalWrite(PINO_TELA, HIGH); 
-  
-  tft.init(170, 320);
+  digitalWrite(PINO_TELA, LOW);
+
+  tft.init(240, 280);
   tft.setRotation(3);
   tft.fillScreen(ST77XX_BLACK);
   animacaoDeBoot();
-  
+
   sistemaArquivos.name = "SD PICO";
   sistemaArquivos.path = "/";
   sistemaArquivos.isDir = true;
-  sistemaArquivos.expanded = false;
-  
+
   atualizarListaMenu();
-  desenharCabecalho(false);
-  desenharMenu(false);
+  desenharCabecalho();
 }
 
 void loop() {
   verificarBotaoFisico();
-  
-  switch(estadoAtual) {
-    case MENU_PRINCIPAL:
-      processarEntradaMenu();
-      break;
-    case APP_TERMINAL:
+
+  // Roteador central da FSM
+  switch (estadoAtual) {
+    case TERMINAL_CMD:
       processarEntradaTerminal();
       break;
     case APP_CALCULADORA:
@@ -93,26 +71,22 @@ void loop() {
     case APP_SNAKE:
       processarEntradaSnake();
       break;
+    case APP_EXPLORADOR:
+      processarEntradaExplorador();
+      break;
     case POPUP_DESLIGAR:
+      // Apps congelam; o relogio do popup roda isolado em verificarBotaoFisico()
       break;
   }
-  
-  if (estadoAtual == MENU_PRINCIPAL) {
-    atualizarMarquee(false);
-  } else if (estadoAtual == APP_TERMINAL) {
-    atualizarMarquee(true);
+
+  // Efeitos visuais apenas fora dos apps fullscreen
+  if (estadoAtual == TERMINAL_CMD || estadoAtual == APP_CALCULADORA) {
+    atualizarMarquee();
     if (millis() - tempoUltimoBlink > (unsigned long)intervaloBlink) {
       tempoUltimoBlink = millis();
       cursorVisivel = !cursorVisivel;
-      if (cursorVisivel) tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_WHITE);
-      else tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_BLACK);
-    }
-  } else if (estadoAtual == APP_CALCULADORA) {
-    if (millis() - tempoUltimoBlink > (unsigned long)intervaloBlink) {
-      tempoUltimoBlink = millis();
-      cursorVisivel = !cursorVisivel;
-      if (cursorVisivel) tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_WHITE);
-      else tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_BLACK);
+      tft.fillRect(cursorX, cursorY, LARGURA_CHAR, 8,
+                   cursorVisivel ? ST77XX_WHITE : ST77XX_BLACK);
     }
   }
 }

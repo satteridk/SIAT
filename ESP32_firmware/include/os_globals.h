@@ -3,77 +3,42 @@
 
 #include "os_config.h"
 
+// ==========================================
+// NUCLEO - apenas recursos realmente transversais
+// ==========================================
 extern Adafruit_ST7789 tft;
 extern MathParser parser;
 
-#define COR_CINZA tft.color565(130, 130, 130)
+#define COR_CINZA             tft.color565(130, 130, 130)
 #define COR_FUNDO_SELECIONADO tft.color565(50, 50, 50)
+#define COR_PASTA             tft.color565(255, 215, 0)
+#define COR_PASTA_CLARA       tft.color565(255, 245, 150)
+#define COR_SNAKE             tft.color565(0, 200, 90)
 
-extern int cursorX;
-extern int cursorY;
-extern unsigned long tempoUltimoBlink;
-extern bool cursorVisivel;
-extern bool esperandoTexto; 
-extern String tituloAtual;
-
+// ==========================================
+// MAQUINA DE ESTADOS FINITA (FSM)
+// ==========================================
 enum EstadoSistema {
-  MENU_PRINCIPAL,
-  APP_TERMINAL,
+  TERMINAL_CMD,
   APP_CALCULADORA,
   APP_SNAKE,
+  APP_EXPLORADOR,
   POPUP_DESLIGAR
 };
+
 extern EstadoSistema estadoAtual;
 extern EstadoSistema estadoAnterior;
 
-extern unsigned long tempoAberturaPopup;
-extern int segundosRestantes;
-extern bool estadoAnteriorBotao;
-extern unsigned long ultimoDebounce;
+extern volatile bool uartOcupada;   // Arbitragem da UART2 entre Core 0 e Core 1
+extern bool forcarRedrawSnake;      // Repintura solicitada por outro modulo
 
-extern FileNode sistemaArquivos;
-extern std::vector<MenuItem> menuAtual;
-extern int opcaoSelecionada;
-extern int marqueeOffset;
-extern unsigned long lastMarqueeUpdate;
-
-extern bool forcarRedrawSnake; 
-
-extern String cacheLinhas[MAX_LINHAS_CACHE];
-extern uint16_t cacheCores[MAX_LINHAS_CACHE][MAX_CHARS_LINHA]; 
-extern int idxLinhaCache;
-extern int indiceLinhaInicioPagina;
-extern int scrollLinha;
-
-extern volatile bool uartOcupada;
-
-// GUI
-void desenharMenu(bool telaDividida = false);
-void atualizarMarquee(bool telaDividida = false);
-void desenharCabecalho(bool telaDividida = false);
-void desenharPopup(int segundos);
-void fecharPopup();
-void animacaoDeBoot();
-void escreverEfeitoDigitacao(const String& texto, int tamanhoFonte, uint16_t cor);
-void desenharIcone(int x, int y, int tipo);
-void atualizarListaMenu();
-void processarEntradaMenu();
-
-// Terminal
-void iniciarTerminal();
-void sairTerminal();
-void limparCache();
-void novaLinhaCache();
-void adicionarAoCache(char c, uint16_t cor);
-void desenharLinhaCache(int indice, int y);
-void restaurarPaginaAtual();
-void renderizarScroll();
-void avancarLinha(uint16_t corRestaurar = ST77XX_GREEN, int tamanhoFonteRestaurar = 1);
-String limparAcentos(const String& textoOriginal);
-void processarEntradaTerminal();
-
-// Hardware
-void desligarSistema();
-void verificarBotaoFisico();
+// ==========================================
+// AGREGACAO DOS MODULOS
+// Cada modulo declara o proprio estado e a propria API.
+// ==========================================
+#include "gui/os_icons.h"
+#include "gui/os_gui.h"
+#include "core/os_terminal.h"
+#include "core/os_hardware.h"
 
 #endif

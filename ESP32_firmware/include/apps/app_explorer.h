@@ -3,6 +3,12 @@
 
 #include "../os_globals.h"
 
-void acaoExplorador(MenuItem& item);
+// Arvore espelhada do MicroSD do PICO (pertence ao explorador)
+extern FileNode sistemaArquivos;
+
+void iniciarExplorador();
+void sairExplorador();
+void desenharExplorador();
+void processarEntradaExplorador();
 
 #endif
