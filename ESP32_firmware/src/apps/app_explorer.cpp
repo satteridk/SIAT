@@ -15,7 +15,6 @@ String limparCaracteresEspeciais(String texto) {
   t.replace("Ó", "O"); t.replace("Ò", "O"); t.replace("Ô", "O"); t.replace("Õ", "O");
   t.replace("Ú", "U"); t.replace("Ù", "U"); t.replace("Û", "U");
   t.replace("Ç", "C");
-  
   String limpo = "";
   for (int i = 0; i < t.length(); i++) {
     unsigned char c = t[i];
@@ -35,8 +34,8 @@ String formatarTamanhoBytes(String tamanhoStr) {
 }
 
 void acaoExplorador(MenuItem& item) {
-  if (item.actionId == 1) { 
-     iniciarSnake();
+  if (item.actionId == 1) {
+      iniciarSnake();
   } else if (item.actionId == 2) {
     Serial.println("App/Jogo Selecionado: AudioPlayer");
   } else if (item.actionId == 3 && item.node != nullptr) {
@@ -47,8 +46,8 @@ void acaoExplorador(MenuItem& item) {
           item.node->children.clear();
           Serial.println("Explorador de arquivos: Solicitando dados ao PICO...");
           
-          uartOcupada = true; // Trava o Core 0 para que ele não roube as mensagens
-          Serial2.println("DADOS_SD"); 
+          uartOcupada = true;
+          Serial2.println("DADOS_SD");
           
           FileNode* ponteirosNivel[10]; 
           ponteirosNivel[0] = item.node;
@@ -66,13 +65,12 @@ void acaoExplorador(MenuItem& item) {
                   if (strcmp(bufferLinha, "INICIO_SD") == 0) {
                       recebendo = true;
                       Serial.println("\n--- CONTEUDO DO CARTAO MICROSD ---");
-                      Serial.println("/SD_PICO"); 
+                      Serial.println("/SD_PICO");
                   } else if (strcmp(bufferLinha, "FIM_SD") == 0) {
                       Serial.println("----------------------------------");
                       break; 
                   } else if (recebendo && len > 0) {
                       if (bufferLinha[0] == 'D' || bufferLinha[0] == 'F') {
-                          // Parsing ultra-rápido direto do Array
                           char* tipoStr = strtok(bufferLinha, "|");
                           char* nivelStr = strtok(NULL, "|");
                           char* nomeBruto = strtok(NULL, "|");
@@ -82,7 +80,7 @@ void acaoExplorador(MenuItem& item) {
                               int nivel = atoi(nivelStr);
                               String nomeLimpo = limparCaracteresEspeciais(String(nomeBruto));
                               
-                              for(int i = 0; i <= nivel; i++) Serial.print("  "); 
+                              for(int i = 0; i <= nivel; i++) Serial.print("  ");
                               if(tipoStr[0] == 'D') {
                                   Serial.print("/"); Serial.println(nomeLimpo);
                               } else {
@@ -106,10 +104,10 @@ void acaoExplorador(MenuItem& item) {
                   }
               }
           }
-          uartOcupada = false; // Libera o Core 0 de volta
+          uartOcupada = false;
       }
       atualizarListaMenu();
-      desenharMenu();
+      desenharMenu(estadoAtual == APP_TERMINAL);
     }
   }
 }

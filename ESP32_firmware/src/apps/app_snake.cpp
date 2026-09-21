@@ -12,7 +12,7 @@ unsigned long tempoUltimoMovimentoSnake = 0;
 int velocidadeSnake = 150; 
 
 int gameAreaX, gameAreaY, gameAreaW, gameAreaH;
-const int tamanhoBloco = 8; 
+const int tamanhoBloco = 16; 
 
 void desenharBloco(int x, int y, uint16_t cor) {
   tft.fillRect(gameAreaX + (x * tamanhoBloco), gameAreaY + (y * tamanhoBloco), tamanhoBloco, tamanhoBloco, cor);
@@ -42,15 +42,15 @@ void gerarComidaSnake() {
 }
 
 void atualizarPlacarSnake() {
-  tft.fillRect(0, 0, tft.width(), 18, ST77XX_BLACK);
-  tft.setTextSize(1);
+  tft.fillRect(0, 0, tft.width(), 34, ST77XX_BLACK);
+  tft.setTextSize(2);
   tft.setTextColor(ST77XX_WHITE);
-  tft.setCursor(5, 5);
+  tft.setCursor(10, 10);
   tft.print("SCORE: ");
   tft.print(snakeScore);
   
   String controls = "W A S D - EXIT";
-  tft.setCursor(tft.width() - (controls.length() * 6) - 5, 5);
+  tft.setCursor(tft.width() - (controls.length() * 12) - 10, 10);
   tft.print(controls);
 }
 
@@ -77,33 +77,32 @@ void desenharCobra() {
 
 void gameOverSnake() {
   tft.fillScreen(ST77XX_BLACK);
-  tft.setTextSize(2);
+  tft.setTextSize(3);
   tft.setTextColor(ST77XX_RED);
-  tft.setCursor((tft.width() - (9 * 12)) / 2, (tft.height() / 2) - 20);
+  tft.setCursor((tft.width() - (9 * 18)) / 2, (tft.height() / 2) - 30);
   tft.print("GAME OVER");
   
-  tft.setTextSize(1);
+  tft.setTextSize(2);
   tft.setTextColor(ST77XX_WHITE);
-  tft.setCursor((tft.width() - (15 * 6)) / 2, (tft.height() / 2) + 10);
+  tft.setCursor((tft.width() - (15 * 12)) / 2, (tft.height() / 2) + 10);
   tft.print("Score Final: ");
   tft.print(snakeScore);
   
-  // Loop de espera inteligente de 3 segundos
   unsigned long inicioGameOver = millis();
-  while (millis() - inicioGameOver < 1500) {
+  while (millis() - inicioGameOver < 3000) {
     if (Serial.available()) {
       String input = Serial.readStringUntil('\n');
       input.trim();
       input.toLowerCase();
       if (input == "exit") {
         sairSnake();
-        return; // Sai imediatamente da função, ignorando o restart do jogo
+        return; 
       }
     }
-    delay(10); // Alimenta o watchdog e não frita a CPU
+    delay(10); 
   }
   
-  iniciarSnake(); // Só reinicia se os 3 segundos passarem sem o comando de exit
+  iniciarSnake(); 
 }
 
 void atualizarJogoSnake() {
@@ -111,7 +110,7 @@ void atualizarJogoSnake() {
     forcarRedrawSnake = false;
     tft.fillScreen(ST77XX_BLACK);
     tft.drawRect(0, 0, tft.width(), tft.height(), ST77XX_WHITE);
-    tft.drawFastHLine(0, 19, tft.width(), ST77XX_WHITE);
+    tft.drawFastHLine(0, 36, tft.width(), ST77XX_WHITE);
     atualizarPlacarSnake();
     desenharCobra();
     desenharBloco(foodX, foodY, ST77XX_RED);
@@ -170,12 +169,12 @@ void iniciarSnake() {
   snakeScore = 0;
   tft.fillScreen(ST77XX_BLACK);
   tft.drawRect(0, 0, tft.width(), tft.height(), ST77XX_WHITE);
-  tft.drawFastHLine(0, 19, tft.width(), ST77XX_WHITE);
+  tft.drawFastHLine(0, 36, tft.width(), ST77XX_WHITE);
   
-  gameAreaX = 1;
-  gameAreaY = 20;
-  gameAreaW = tft.width() - 2;
-  int rawH = tft.height() - 21;
+  gameAreaX = 2;
+  gameAreaY = 38;
+  gameAreaW = tft.width() - 4;
+  int rawH = tft.height() - 40;
   gameAreaH = rawH - (rawH % tamanhoBloco); 
   
   atualizarPlacarSnake();
@@ -184,17 +183,10 @@ void iniciarSnake() {
 }
 
 void sairSnake() {
-  estadoAtual = TERMINAL_CMD;
-  if (scrollLinha > 0) {
-    renderizarScroll();
-  } else {
-    restaurarPaginaAtual();
-  }
-
-  if (cursorX > margemEsquerda) {
-    avancarLinha();
-  }
-  escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
+  estadoAtual = MENU_PRINCIPAL;
+  tft.fillScreen(ST77XX_BLACK);
+  desenharCabecalho(false);
+  desenharMenu(false);
 }
 
 void processarEntradaSnake() {

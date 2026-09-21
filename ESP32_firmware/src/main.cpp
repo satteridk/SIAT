@@ -11,11 +11,10 @@ int cursorY = inicioTextoY;
 unsigned long tempoUltimoBlink = 0;
 bool cursorVisivel = false;
 bool esperandoTexto = true; 
-String tituloAtual = "TERMINAL V2.6";
-bool telaInicialCreditos = true;
+String tituloAtual = "S.I.A.T OS";
 
-EstadoSistema estadoAtual = TERMINAL_CMD;
-EstadoSistema estadoAnterior = TERMINAL_CMD;
+EstadoSistema estadoAtual = MENU_PRINCIPAL;
+EstadoSistema estadoAnterior = MENU_PRINCIPAL;
 
 unsigned long tempoAberturaPopup = 0;
 int segundosRestantes = 3;
@@ -52,7 +51,7 @@ void TarefaBackground(void *pvParameters) {
 
 void setup() {
   Serial.begin(115200);
-  Serial.setTimeout(10); // <-- CORREÇÃO: Força o ESP32 a não esperar 1 segundo por novos caracteres
+  Serial.setTimeout(10); 
   
   Serial2.begin(921600, SERIAL_8N1, 16, 17); 
   Serial2.setTimeout(20);
@@ -74,14 +73,18 @@ void setup() {
   sistemaArquivos.expanded = false;
   
   atualizarListaMenu();
-  desenharCabecalho();
+  desenharCabecalho(false);
+  desenharMenu(false);
 }
 
 void loop() {
   verificarBotaoFisico();
   
   switch(estadoAtual) {
-    case TERMINAL_CMD:
+    case MENU_PRINCIPAL:
+      processarEntradaMenu();
+      break;
+    case APP_TERMINAL:
       processarEntradaTerminal();
       break;
     case APP_CALCULADORA:
@@ -94,13 +97,22 @@ void loop() {
       break;
   }
   
-  if (estadoAtual == TERMINAL_CMD || estadoAtual == APP_CALCULADORA) {
-    atualizarMarquee();
+  if (estadoAtual == MENU_PRINCIPAL) {
+    atualizarMarquee(false);
+  } else if (estadoAtual == APP_TERMINAL) {
+    atualizarMarquee(true);
     if (millis() - tempoUltimoBlink > (unsigned long)intervaloBlink) {
       tempoUltimoBlink = millis();
       cursorVisivel = !cursorVisivel;
-      if (cursorVisivel) tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_WHITE);
-      else tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_BLACK);
+      if (cursorVisivel) tft.fillRect(cursorX, cursorY, 12, 16, ST77XX_WHITE);
+      else tft.fillRect(cursorX, cursorY, 12, 16, ST77XX_BLACK);
+    }
+  } else if (estadoAtual == APP_CALCULADORA) {
+    if (millis() - tempoUltimoBlink > (unsigned long)intervaloBlink) {
+      tempoUltimoBlink = millis();
+      cursorVisivel = !cursorVisivel;
+      if (cursorVisivel) tft.fillRect(cursorX, cursorY, 12, 16, ST77XX_WHITE);
+      else tft.fillRect(cursorX, cursorY, 12, 16, ST77XX_BLACK);
     }
   }
 }

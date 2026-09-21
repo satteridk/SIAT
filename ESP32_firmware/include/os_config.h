@@ -1,6 +1,5 @@
 #ifndef OS_CONFIG_H
 #define OS_CONFIG_H
-
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
@@ -18,7 +17,7 @@
 #define PINO_TELA  15
 
 const int margemEsquerda = 5;
-const int inicioTextoY = 20;
+const int inicioTextoY = 32; 
 const int intervaloBlink = 400;
 
 #define ICONE_PASTA_FECHADA 0
@@ -30,7 +29,7 @@ const int intervaloBlink = 400;
 #define ICONE_TEXTO 7
 
 const int MAX_LINHAS_CACHE = 200;
-#define MAX_CHARS_LINHA 50
+#define MAX_CHARS_LINHA 30 
 
 struct FileNode {
   String name;
@@ -47,5 +46,4 @@ struct MenuItem {
   FileNode* node;
   int indent;
 };
-
 #endif

@@ -28,28 +28,20 @@ void verificarBotaoFisico() {
 }
 
 void desligarSistema() {
-  tft.fillScreen(ST77XX_BLACK); tft.setTextSize(1); tft.setTextColor(ST77XX_WHITE);
-  String l1 = "------------------------------------";
+  tft.fillScreen(ST77XX_BLACK); tft.setTextSize(2); tft.setTextColor(ST77XX_WHITE);
   String l2 = "GOODBYE!";
-  String l3 = "------------------------------------";
-  int yC = (tft.height() - 30) / 2; 
-  tft.setCursor((tft.width() - (l1.length() * 6)) / 2, yC); tft.print(l1);
-  tft.setCursor((tft.width() - (l2.length() * 6)) / 2, yC + 10); tft.print(l2);
-  tft.setCursor((tft.width() - (l3.length() * 6)) / 2, yC + 20); tft.print(l3);
+  int yC = (tft.height() - 16) / 2; 
+  tft.setCursor((tft.width() - (l2.length() * 12)) / 2, yC); tft.print(l2);
   
   delay(1500); 
   tft.fillScreen(ST77XX_BLACK); 
-  
   digitalWrite(PINO_TELA, LOW); 
   
   while(digitalRead(PINO_BOTAO) == LOW) delay(10);
   
-  // Opção de Wakeup 1: Botão Físico
   rtc_gpio_pullup_en(GPIO_NUM_13);
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_13, 0);
 
-  // Opção de Wakeup 2: Monitor Serial (UART0)
-  // O ESP32 acordará após receber 3 bordas de pulso no RX (equivalente a apertar ENTER)
   uart_set_wakeup_threshold(UART_NUM_0, 3); 
   esp_sleep_enable_uart_wakeup(UART_NUM_0);
 

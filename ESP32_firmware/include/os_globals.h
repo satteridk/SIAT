@@ -15,11 +15,10 @@ extern unsigned long tempoUltimoBlink;
 extern bool cursorVisivel;
 extern bool esperandoTexto; 
 extern String tituloAtual;
-extern bool telaInicialCreditos;
 
-// --- NOVA ARQUITETURA FSM ---
 enum EstadoSistema {
-  TERMINAL_CMD,
+  MENU_PRINCIPAL,
+  APP_TERMINAL,
   APP_CALCULADORA,
   APP_SNAKE,
   POPUP_DESLIGAR
@@ -49,25 +48,27 @@ extern int scrollLinha;
 extern volatile bool uartOcupada;
 
 // GUI
-void desenharMenu();
-void atualizarMarquee();
-void desenharCabecalho();
+void desenharMenu(bool telaDividida = false);
+void atualizarMarquee(bool telaDividida = false);
+void desenharCabecalho(bool telaDividida = false);
 void desenharPopup(int segundos);
 void fecharPopup();
-void exibirBootlogoComando();
 void animacaoDeBoot();
 void escreverEfeitoDigitacao(const String& texto, int tamanhoFonte, uint16_t cor);
 void desenharIcone(int x, int y, int tipo);
 void atualizarListaMenu();
+void processarEntradaMenu();
 
 // Terminal
+void iniciarTerminal();
+void sairTerminal();
 void limparCache();
 void novaLinhaCache();
 void adicionarAoCache(char c, uint16_t cor);
 void desenharLinhaCache(int indice, int y);
 void restaurarPaginaAtual();
 void renderizarScroll();
-void avancarLinha(uint16_t corRestaurar = ST77XX_GREEN, int tamanhoFonteRestaurar = 1);
+void avancarLinha(uint16_t corRestaurar = ST77XX_GREEN, int tamanhoFonteRestaurar = 2);
 String limparAcentos(const String& textoOriginal);
 void processarEntradaTerminal();
 

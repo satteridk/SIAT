@@ -10,12 +10,13 @@ void processarEntradaCalc() {
   textoUpper.toUpperCase();
 
   if (textoUpper == "EXIT") {
-    estadoAtual = TERMINAL_CMD; // O FSM devolverá o sistema ao Terminal imediatamente 
-    if (cursorX > margemEsquerda) avancarLinha();
-    escreverEfeitoDigitacao("CALCULADORA DESATIVADA.", 1, ST77XX_GREEN);
+    estadoAtual = APP_TERMINAL; 
+    int startX = (tft.width() / 2) + 6;
+    if (cursorX > startX) avancarLinha(ST77XX_GREEN, 2);
+    escreverEfeitoDigitacao("CALC DESATIVADA.", 2, ST77XX_GREEN);
     
-    if (cursorX > margemEsquerda) avancarLinha();
-    escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
+    avancarLinha(ST77XX_WHITE, 2);
+    escreverEfeitoDigitacao("CMD> ", 2, ST77XX_WHITE);
     
     esperandoTexto = true;
     return;
@@ -46,18 +47,18 @@ void processarEntradaCalc() {
      restaurarPaginaAtual();
    }
 
-  escreverEfeitoDigitacao(textoLido, 1, ST77XX_WHITE);
-  avancarLinha();
+  escreverEfeitoDigitacao(textoLido, 2, ST77XX_WHITE);
+  avancarLinha(ST77XX_GREEN, 2);
 
   if (parser.compile(textoLido.c_str())) {
     double resultadoCalc = parser.eval();
     String resFinal = String(resultadoCalc, 4); 
-    escreverEfeitoDigitacao("= " + resFinal, 1, ST77XX_GREEN);
+    escreverEfeitoDigitacao("= " + resFinal, 2, ST77XX_GREEN);
   } else {
-    escreverEfeitoDigitacao("Erro: Expressao invalida.", 1, ST77XX_RED);
+    escreverEfeitoDigitacao("Erro: Expressao invalida.", 2, ST77XX_RED);
   }
 
-  avancarLinha();
-  escreverEfeitoDigitacao("calc> ", 1, ST77XX_CYAN);
+  avancarLinha(ST77XX_CYAN, 2);
+  escreverEfeitoDigitacao("calc> ", 2, ST77XX_CYAN);
   esperandoTexto = true;
 }
