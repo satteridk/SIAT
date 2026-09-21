@@ -104,15 +104,15 @@ void loop() {
     if (millis() - tempoUltimoBlink > (unsigned long)intervaloBlink) {
       tempoUltimoBlink = millis();
       cursorVisivel = !cursorVisivel;
-      if (cursorVisivel) tft.fillRect(cursorX, cursorY, 12, 16, ST77XX_WHITE);
-      else tft.fillRect(cursorX, cursorY, 12, 16, ST77XX_BLACK);
+      if (cursorVisivel) tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_WHITE);
+      else tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_BLACK);
     }
   } else if (estadoAtual == APP_CALCULADORA) {
     if (millis() - tempoUltimoBlink > (unsigned long)intervaloBlink) {
       tempoUltimoBlink = millis();
       cursorVisivel = !cursorVisivel;
-      if (cursorVisivel) tft.fillRect(cursorX, cursorY, 12, 16, ST77XX_WHITE);
-      else tft.fillRect(cursorX, cursorY, 12, 16, ST77XX_BLACK);
+      if (cursorVisivel) tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_WHITE);
+      else tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_BLACK);
     }
   }
 }

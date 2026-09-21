@@ -27,9 +27,10 @@ const int intervaloBlink = 400;
 #define ICONE_ARQUIVO 5
 #define ICONE_MUSICA 6
 #define ICONE_TEXTO 7
+#define ICONE_CMD 8
 
 const int MAX_LINHAS_CACHE = 200;
-#define MAX_CHARS_LINHA 30 
+#define MAX_CHARS_LINHA 50 
 
 struct FileNode {
   String name;

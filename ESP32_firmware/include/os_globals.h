@@ -68,7 +68,7 @@ void adicionarAoCache(char c, uint16_t cor);
 void desenharLinhaCache(int indice, int y);
 void restaurarPaginaAtual();
 void renderizarScroll();
-void avancarLinha(uint16_t corRestaurar = ST77XX_GREEN, int tamanhoFonteRestaurar = 2);
+void avancarLinha(uint16_t corRestaurar = ST77XX_GREEN, int tamanhoFonteRestaurar = 1);
 String limparAcentos(const String& textoOriginal);
 void processarEntradaTerminal();
 

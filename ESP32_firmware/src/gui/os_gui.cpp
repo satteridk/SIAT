@@ -41,6 +41,15 @@ void desenharIcone(int x, int y, int tipo) {
     tft.fillRect(x + 6, y + 10, 8, 2, ST77XX_BLACK);
     tft.fillRect(x + 6, y + 14, 4, 2, ST77XX_BLACK);
   }
+  else if (tipo == ICONE_CMD) {
+    tft.fillRect(x + 2, y + 4, 20, 16, ST77XX_BLACK); 
+    tft.drawRect(x + 2, y + 4, 20, 16, ST77XX_WHITE); 
+    tft.fillRect(x + 2, y + 4, 20, 4, ST77XX_WHITE); 
+    tft.drawPixel(x + 4, y + 10, ST77XX_WHITE);
+    tft.drawPixel(x + 5, y + 11, ST77XX_WHITE);
+    tft.drawPixel(x + 4, y + 12, ST77XX_WHITE);
+    tft.drawFastHLine(x + 7, y + 12, 4, ST77XX_WHITE);
+  }
 }
 
 void adicionarNoMenu(FileNode& dir, int indent) {
@@ -77,7 +86,7 @@ void adicionarNoMenu(FileNode& dir, int indent) {
 void atualizarListaMenu() {
   menuAtual.clear();
   
-  MenuItem t; t.name = "Terminal"; t.icon = ICONE_TEXTO; t.actionId = 4; t.indent = 0; t.node = nullptr;
+  MenuItem t; t.name = "Terminal"; t.icon = ICONE_CMD; t.actionId = 4; t.indent = 0; t.node = nullptr;
   menuAtual.push_back(t);
   
   MenuItem exp; 
@@ -105,9 +114,11 @@ void atualizarListaMenu() {
 void desenharMenu(bool telaDividida) {
   int topY = 25;
   int limiteX = tft.width() / 2; 
-  int menuX = 2; 
+  
+  // MenuX ajustado para 3 para preservar exatamente 1 pixel de borda branca desenhada no cabeçalho
+  int menuX = 3; 
   int menuY = topY + 1;
-  int menuW = telaDividida ? limiteX - 4 : tft.width() - 4; 
+  int menuW = telaDividida ? limiteX - 5 : tft.width() - 6; 
   int menuH = tft.height() - topY - 4; 
 
   tft.fillRect(menuX, menuY, menuW, menuH, ST77XX_BLACK);
@@ -127,7 +138,7 @@ void desenharMenu(bool telaDividida) {
     int baseX = menuX + 8 + (menuAtual[i].indent * 12);
     
     if (opcaoSelecionada == (int)i) {
-      tft.fillRect(menuX + 4, drawY - 4, menuW - 8, 28, COR_FUNDO_SELECIONADO);
+      tft.fillRect(menuX + 3, drawY - 4, menuW - 6, 28, COR_FUNDO_SELECIONADO);
       tft.setTextColor(ST77XX_WHITE);
     } else {
       tft.setTextColor(COR_CINZA);
@@ -161,9 +172,9 @@ void atualizarMarquee(bool telaDividida) {
   if (opcaoSelecionada >= (int)menuAtual.size()) return;
   int topY = 25;
   int limiteX = tft.width() / 2; 
-  int menuX = 2; 
+  int menuX = 3; 
   int menuY = topY + 1;
-  int menuW = telaDividida ? limiteX - 4 : tft.width() - 4; 
+  int menuW = telaDividida ? limiteX - 5 : tft.width() - 6; 
   int menuH = tft.height() - topY - 4; 
 
   String txt = menuAtual[opcaoSelecionada].name;
@@ -203,18 +214,12 @@ void atualizarMarquee(bool telaDividida) {
 }
 
 void desenharCabecalho(bool telaDividida) {
-  tft.setTextSize(2); tft.setTextColor(ST77XX_WHITE); tft.setCursor(margemEsquerda, 5);
-  int maxCaracteres = tft.width() / 12; 
-  String textoCentral = " " + tituloAtual + " "; 
-  int espacoRestante = maxCaracteres - textoCentral.length();
-  if (espacoRestante < 0) espacoRestante = 0; 
-  String linha = "";
-  for(int i = 0; i < (espacoRestante / 2); i++) linha += "=";
-  linha += textoCentral;
-  for(int i = 0; i < (espacoRestante - (espacoRestante / 2)); i++) linha += "=";
-  tft.print(linha);
-
   int topY = 25; 
+  
+  // Limpa a área do topo totalmente (removido o título, deixando preto para futuros ícones)
+  tft.fillRect(0, 0, tft.width(), topY, ST77XX_BLACK);
+  
+  // Desenha as bordas intactas
   tft.drawRect(2, topY, tft.width() - 4, tft.height() - topY - 2, ST77XX_WHITE);
   if (telaDividida) {
     int limiteX = tft.width() / 2;
@@ -263,8 +268,8 @@ void animacaoDeBoot() {
   
   int larguraCharSize6 = 36; 
   int alturaCharSize6 = 48;  
-  int alturaCharSize2 = 16;
-  int larguraCharSize2 = 12;
+  int alturaCharSize1 = 8;
+  int larguraCharSize1 = 6;
 
   int wTexto = logoTexto.length() * larguraCharSize6;
   int logoX = (tft.width() - wTexto) / 2;
@@ -274,18 +279,18 @@ void animacaoDeBoot() {
   tft.setCursor(logoX, logoY);
   tft.print(logoTexto);
 
-  tft.setTextSize(2);
-  int simboloY = logoY + (alturaCharSize6 - alturaCharSize2);
+  tft.setTextSize(1);
+  int simboloY = logoY + (alturaCharSize6 - alturaCharSize1);
   tft.setCursor(logoX + wTexto + 4, simboloY); 
   tft.print(logoSimbolo);
 
-  tft.setTextSize(2);
+  tft.setTextSize(1);
   String footer1 = "satter's S.I.A.T";
   String footer2 = "terminal v2.7"; 
-  int f1W = footer1.length() * larguraCharSize2;
-  int f2W = footer2.length() * larguraCharSize2;
-  int f2Y = tft.height() - alturaCharSize2 - 10; 
-  int f1Y = f2Y - 24; 
+  int f1W = footer1.length() * larguraCharSize1;
+  int f2W = footer2.length() * larguraCharSize1;
+  int f2Y = tft.height() - alturaCharSize1 - 10; 
+  int f1Y = f2Y - 12; 
   int f1X = (tft.width() - f1W) / 2;
   int f2X = (tft.width() - f2W) / 2;
 

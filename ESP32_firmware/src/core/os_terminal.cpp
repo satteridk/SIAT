@@ -9,7 +9,7 @@ void iniciarTerminal() {
   limparCache();
   cursorX = (tft.width() / 2) + 6;
   cursorY = 32;
-  escreverEfeitoDigitacao("CMD> ", 2, ST77XX_WHITE);
+  escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
 }
 
 void sairTerminal() {
@@ -59,12 +59,12 @@ void adicionarAoCache(char c, uint16_t cor) {
 void desenharLinhaCache(int indice, int y) {
   int startX = (estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA) ? (tft.width() / 2) + 6 : margemEsquerda;
   int x = startX;
-  tft.setTextSize(2);
+  tft.setTextSize(1);
   for (size_t i = 0; i < cacheLinhas[indice].length(); i++) {
     tft.setTextColor(cacheCores[indice][i]);
     tft.setCursor(x, y);
     tft.print(cacheLinhas[indice][i]);
-    x += 12;
+    x += 6;
   }
 }
 
@@ -73,8 +73,8 @@ void restaurarPaginaAtual() {
   desenharCabecalho(estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA);
   if (estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA) desenharMenu(true);
   
-  int areaY = tft.height() - 32 - 10;
-  int maxLinhasVisiveis = areaY / 20;
+  int areaY = tft.height() - 32 - 4;
+  int maxLinhasVisiveis = areaY / 12;
   int linhaInicioRender = idxLinhaCache - maxLinhasVisiveis + 1;
   if (linhaInicioRender < indiceLinhaInicioPagina) {
     linhaInicioRender = indiceLinhaInicioPagina;
@@ -84,14 +84,14 @@ void restaurarPaginaAtual() {
   int y = 32;
   for (int i = linhaInicioRender; i <= idxLinhaCache; i++) {
     desenharLinhaCache(i, y);
-    y += 20;
+    y += 12;
   }
   int startX = (estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA) ? (tft.width() / 2) + 6 : margemEsquerda;
   cursorX = startX;
   if (cacheLinhas[idxLinhaCache].length() > 0) {
-      cursorX = startX + (cacheLinhas[idxLinhaCache].length() * 12);
+      cursorX = startX + (cacheLinhas[idxLinhaCache].length() * 6);
   }
-  cursorY = y - 20;
+  cursorY = y - 12;
 }
 
 void renderizarScroll() {
@@ -99,8 +99,8 @@ void renderizarScroll() {
   desenharCabecalho(estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA);
   if (estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA) desenharMenu(true);
 
-  int areaY = tft.height() - 32 - 10;
-  int maxLinhasVisiveis = areaY / 20;
+  int areaY = tft.height() - 32 - 4;
+  int maxLinhasVisiveis = areaY / 12;
   
   int linhaFimScroll = idxLinhaCache - scrollLinha;
   if (linhaFimScroll < 0) linhaFimScroll = 0;
@@ -111,7 +111,7 @@ void renderizarScroll() {
   int y = 32;
   for (int i = linhaInicioScroll; i <= linhaFimScroll; i++) {
     desenharLinhaCache(i, y);
-    y += 20;
+    y += 12;
   }
 
   int barraX = tft.width() - 10;
@@ -132,14 +132,14 @@ void renderizarScroll() {
 }
 
 void avancarLinha(uint16_t corRestaurar, int tamanhoFonteRestaurar) {
-  cursorY += 20; 
+  cursorY += 12; 
   int startX = (estadoAtual == APP_TERMINAL || estadoAtual == APP_CALCULADORA) ? (tft.width() / 2) + 6 : margemEsquerda;
   cursorX = startX; 
   novaLinhaCache();
   
-  if (cursorY > tft.height() - 24) {
+  if (cursorY > tft.height() - 12) {
     restaurarPaginaAtual(); 
-    cursorY = tft.height() - 24; 
+    cursorY = tft.height() - 16; 
   }
   tft.setTextColor(corRestaurar); 
 }
@@ -168,7 +168,7 @@ void processarEntradaTerminal() {
   if (textoLido.length() == 0) return;
 
   if (scrollLinha == 0) {
-    tft.fillRect(cursorX, cursorY, 12, 16, ST77XX_BLACK);
+    tft.fillRect(cursorX, cursorY, 6, 8, ST77XX_BLACK);
   }
 
   textoLido = limparAcentos(textoLido);
@@ -183,10 +183,10 @@ void processarEntradaTerminal() {
   if (textoUpper == "CALC" && estadoAtual != APP_CALCULADORA) {
     estadoAtual = APP_CALCULADORA; 
     int startX = (tft.width() / 2) + 6;
-    if (cursorX > startX) avancarLinha(ST77XX_GREEN, 2);
-    escreverEfeitoDigitacao("CALC ATIVADA. EXIT para sair.", 2, ST77XX_GREEN);
-    avancarLinha(ST77XX_CYAN, 2);
-    escreverEfeitoDigitacao("calc> ", 2, ST77XX_CYAN);
+    if (cursorX > startX) avancarLinha(ST77XX_GREEN, 1);
+    escreverEfeitoDigitacao("CALC ATIVADA. EXIT para sair.", 1, ST77XX_GREEN);
+    avancarLinha(ST77XX_CYAN, 1);
+    escreverEfeitoDigitacao("calc> ", 1, ST77XX_CYAN);
     esperandoTexto = true;
     return; 
   }
@@ -195,8 +195,8 @@ void processarEntradaTerminal() {
     scrollLinha = 0; restaurarPaginaAtual();
   }
 
-  escreverEfeitoDigitacao(textoLido, 2, ST77XX_GREEN);
-  avancarLinha(ST77XX_GREEN, 2);
+  escreverEfeitoDigitacao(textoLido, 1, ST77XX_GREEN);
+  avancarLinha(ST77XX_GREEN, 1);
 
   if (textoUpper == "CLEAR") {
     tft.fillScreen(ST77XX_BLACK); 
@@ -249,8 +249,8 @@ void processarEntradaTerminal() {
       for (int j = 0; j < 2; j++) {
         if (i + j < numMensagens) {
           if (Serial.available()) { interrompido = true; break; }
-          escreverEfeitoDigitacao(mensagensAjuda[i + j], 2, ST77XX_GREEN);
-          avancarLinha(ST77XX_GREEN, 2);
+          escreverEfeitoDigitacao(mensagensAjuda[i + j], 1, ST77XX_GREEN);
+          avancarLinha(ST77XX_GREEN, 1);
         }
       }
       if (interrompido) break;
@@ -259,7 +259,7 @@ void processarEntradaTerminal() {
         unsigned long startWait = millis();
         while (millis() - startWait < 666) { if (Serial.available()) { interrompido = true; break; } delay(10); }
         if (interrompido) break;
-        escreverEfeitoDigitacao(".", 2, ST77XX_GREEN);
+        escreverEfeitoDigitacao(".", 1, ST77XX_GREEN);
         if (Serial.available()) { interrompido = true; break; }
       }
       if (interrompido) break;
@@ -283,14 +283,14 @@ void processarEntradaTerminal() {
     ESP.restart();
   }
   else {
-    escreverEfeitoDigitacao("Erro: Comando nao reconhecido.", 2, ST77XX_GREEN);
+    escreverEfeitoDigitacao("Erro: Comando nao reconhecido.", 1, ST77XX_GREEN);
   }
 
   if (textoUpper != "UP" && textoUpper != "DOWN") {
     int startX = (tft.width() / 2) + 6;
     if (cursorX > startX) {
-       avancarLinha(ST77XX_WHITE, 2);
+       avancarLinha(ST77XX_WHITE, 1);
     }
-    escreverEfeitoDigitacao("CMD> ", 2, ST77XX_WHITE);
+    escreverEfeitoDigitacao("CMD> ", 1, ST77XX_WHITE);
   }
 }
