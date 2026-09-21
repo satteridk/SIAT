@@ -88,8 +88,22 @@ void gameOverSnake() {
   tft.print("Score Final: ");
   tft.print(snakeScore);
   
-  delay(3000); 
-  iniciarSnake(); 
+  // Loop de espera inteligente de 3 segundos
+  unsigned long inicioGameOver = millis();
+  while (millis() - inicioGameOver < 1500) {
+    if (Serial.available()) {
+      String input = Serial.readStringUntil('\n');
+      input.trim();
+      input.toLowerCase();
+      if (input == "exit") {
+        sairSnake();
+        return; // Sai imediatamente da função, ignorando o restart do jogo
+      }
+    }
+    delay(10); // Alimenta o watchdog e não frita a CPU
+  }
+  
+  iniciarSnake(); // Só reinicia se os 3 segundos passarem sem o comando de exit
 }
 
 void atualizarJogoSnake() {

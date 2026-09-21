@@ -1,4 +1,5 @@
 #include "../../include/os_globals.h"
+#include "driver/uart.h"
 
 void verificarBotaoFisico() {
   bool leitura = digitalRead(PINO_BOTAO);
@@ -38,9 +39,19 @@ void desligarSistema() {
   
   delay(1500); 
   tft.fillScreen(ST77XX_BLACK); 
-  digitalWrite(PINO_TELA, HIGH); 
+  
+  digitalWrite(PINO_TELA, LOW); 
+  
   while(digitalRead(PINO_BOTAO) == LOW) delay(10);
+  
+  // Opção de Wakeup 1: Botão Físico
   rtc_gpio_pullup_en(GPIO_NUM_13);
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_13, 0);
+
+  // Opção de Wakeup 2: Monitor Serial (UART0)
+  // O ESP32 acordará após receber 3 bordas de pulso no RX (equivalente a apertar ENTER)
+  uart_set_wakeup_threshold(UART_NUM_0, 3); 
+  esp_sleep_enable_uart_wakeup(UART_NUM_0);
+
   esp_deep_sleep_start();
 }
